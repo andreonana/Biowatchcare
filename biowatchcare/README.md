@@ -170,3 +170,112 @@ Les utilisateurs peuvent signer via des clés gérées par l’app (custodial), 
 ```sh
 anchor build
 ```
+
+---
+
+## Lancer le projet sur Windows (guide complet)
+
+> Objectif: compiler le smart contract Anchor **en local** sur Windows (ou via WSL2) et tester sur un cluster local Solana.
+
+### 1) Outils à installer
+
+#### Option recommandée: **WSL2 + Ubuntu**
+
+WSL2 est l’option la plus stable pour Anchor/Solana sur Windows.
+
+1. **Activer WSL2**
+   - Ouvrir PowerShell en admin:
+     ```powershell
+     wsl --install
+     ```
+   - Redémarrer, puis installer **Ubuntu** depuis le Microsoft Store.
+
+2. **Installer Rust**
+   ```bash
+   curl https://sh.rustup.rs -sSf | sh
+   source $HOME/.cargo/env
+   ```
+
+3. **Installer Solana CLI**
+   ```bash
+   sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+   echo 'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   solana --version
+   ```
+
+4. **Installer Anchor**
+   ```bash
+   cargo install --git https://github.com/coral-xyz/anchor avm --locked
+   avm install latest
+   avm use latest
+   anchor --version
+   ```
+
+5. **Installer Node.js (pour les scripts/tests)**
+   - Recommandé via nvm:
+     ```bash
+     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+     source ~/.bashrc
+     nvm install --lts
+     node -v
+     npm -v
+     ```
+
+#### Option alternative: **Sans WSL2 (moins stable)**
+
+Vous pouvez tenter l’installation native sur Windows, mais Anchor et Solana sont plus fiables sous Linux.
+
+### 2) Cloner et ouvrir le repo
+
+```bash
+cd /workspace
+git clone <votre_repo> biowatchcare-repo
+cd biowatchcare-repo/biowatchcare
+```
+
+### 3) Configurer Solana localnet
+
+1. Générer un wallet admin:
+   ```bash
+   solana-keygen new -o ~/.config/solana/id.json
+   ```
+
+2. Lancer un validateur local:
+   ```bash
+   solana-test-validator
+   ```
+
+3. Dans un autre terminal:
+   ```bash
+   solana config set --url localhost
+   solana airdrop 5
+   ```
+
+### 4) Compiler le programme Anchor
+
+```bash
+anchor build
+```
+
+### 5) Déployer sur localnet (optionnel)
+
+```bash
+anchor deploy
+```
+
+### 6) Fichiers importants
+
+- `biowatchcare/Anchor.toml`: configuration Anchor (cluster, wallet).
+- `programs/biowatchcare/src`: code du smart contract.
+- `README.md`: doc backend (fee payer/admin).
+
+### 7) Résumé rapide (checklist)
+
+1. Installer **WSL2 + Ubuntu**
+2. Installer **Rust**
+3. Installer **Solana CLI**
+4. Installer **Anchor (avm)**
+5. Lancer `solana-test-validator`
+6. `anchor build`
+7. `anchor deploy` (si besoin)
