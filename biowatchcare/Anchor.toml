@@ -1,0 +1,9 @@
+[programs.localnet]
+biowatchcare = "BioWAtchCare1111111111111111111111111111111"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+build = "anchor build"
