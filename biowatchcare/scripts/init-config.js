@@ -29,9 +29,11 @@ function loadKeypairIfExists(keypairPath) {
 }
 
 async function getPayer(connection) {
+  const localFallback = path.join(process.cwd(), ".anchor", "localnet-admin.json");
   const candidates = [
     process.env.ANCHOR_WALLET,
     path.join(os.homedir(), ".config", "solana", "id.json"),
+    localFallback,
   ];
   for (const candidate of candidates) {
     const keypair = loadKeypairIfExists(candidate);
@@ -41,6 +43,12 @@ async function getPayer(connection) {
   }
 
   const keypair = anchor.web3.Keypair.generate();
+  fs.mkdirSync(path.dirname(localFallback), { recursive: true });
+  fs.writeFileSync(
+    localFallback,
+    JSON.stringify(Array.from(keypair.secretKey)),
+    "utf8"
+  );
   const sig = await connection.requestAirdrop(
     keypair.publicKey,
     2 * anchor.web3.LAMPORTS_PER_SOL

@@ -37,11 +37,12 @@ Client/test scaffolding (no IDL needed):
   a tiny client that builds the Anchor instruction discriminator manually
   and initializes the config PDA on localnet.
   It loads a keypair from `ANCHOR_WALLET` or `~/.config/solana/id.json`
-  if available; otherwise it generates a temporary keypair and requests
-  an airdrop for local testing.
+  if available; otherwise it creates `.anchor/localnet-admin.json`
+  (ignored by git) and requests an airdrop for local testing.
 - `biowatchcare/tests/biowatchcare.js`:
-  mocha test that initializes the config PDA if missing and asserts the
-  account size (and threshold when created by this test).
+  mocha tests that initialize the config PDA if missing, update the
+  reimbursement threshold, and exercise the entity role lifecycle
+  (register -> approve -> revoke).
 - `.gitignore` (repo root):
   ignore `node_modules/`, `target/`, `test-ledger/` and log files.
 
@@ -101,4 +102,5 @@ Notes:
 - The JS script/test manually encodes the Anchor instruction discriminator.
   This avoids needing an IDL in this environment.
 - If the config PDA already exists, the test will only assert the account
-  size (and will not overwrite it).
+  size (and will not overwrite it). If the admin does not match the current
+  payer, the admin-only tests are skipped.
