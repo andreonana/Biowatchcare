@@ -1,5 +1,5 @@
 [programs.localnet]
-biowatchcare = "BioWAtchCare1111111111111111111111111111111"
+biowatchcare = "FhXSGiUzcvtAVqXM8tyy1HzUf4mFxkUQEvwgmjLRgow3"
 
 [provider]
 cluster = "localnet"
@@ -7,3 +7,6 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 build = "anchor build"
+
+[toolchain]
+anchor_version = "0.31.1"

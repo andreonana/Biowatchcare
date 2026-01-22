@@ -29,7 +29,7 @@ pub fn initialize_config(ctx: Context<InitializeConfig>, threshold: Option<u64>)
     let now = Clock::get()?.unix_timestamp;
     let config = &mut ctx.accounts.config;
     let bump = ctx.bumps.config;
-    *config = GlobalConfig::new(ctx.accounts.admin.key(), bump, now);
+    config.set_inner(GlobalConfig::new(ctx.accounts.admin.key(), bump, now));
     if let Some(value) = threshold {
         config.auto_reimb_threshold = value;
     }

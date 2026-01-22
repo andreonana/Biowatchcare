@@ -1,0 +1,15 @@
+{
+  "name": "biowatchcare",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "init-config": "node scripts/init-config.js",
+    "test": "mocha -t 100000 tests/**/*.js"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1"
+  },
+  "devDependencies": {
+    "mocha": "^10.4.0"
+  }
+}

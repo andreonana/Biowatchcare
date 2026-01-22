@@ -198,6 +198,7 @@ pub fn issue_qr_token(
 }
 
 #[derive(Accounts)]
+#[instruction(token_hash: [u8; 32])]
 pub struct IssueQrToken<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
