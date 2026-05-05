@@ -1,8 +1,10 @@
 pub const CONFIG_SEED: &[u8] = b"config";
+pub const USER_IDENTITY_SEED: &[u8] = b"user_identity";
 pub const ROLE_SEED: &[u8] = b"role";
 pub const PATIENT_SEED: &[u8] = b"patient";
 pub const CONSENT_SEED: &[u8] = b"consent";
 pub const RECORD_SEED: &[u8] = b"record";
+pub const ACCESS_EVENT_SEED: &[u8] = b"access_event";
 pub const RX_SEED: &[u8] = b"rx";
 pub const QR_SEED: &[u8] = b"qr";
 pub const DISPENSE_SEED: &[u8] = b"dispense";

@@ -13,6 +13,25 @@ pub struct ThresholdUpdated {
 }
 
 #[event]
+pub struct PaymentMintSet {
+    pub admin: Pubkey,
+    pub mint: Pubkey,
+}
+
+/// Emitted when admin proposes a 2-step transfer of authority.
+#[event]
+pub struct AdminTransferProposed {
+    pub current_admin: Pubkey,
+    pub pending_admin: Pubkey,
+}
+
+/// Emitted when the pending admin accepts and becomes the new admin.
+#[event]
+pub struct AdminTransferAccepted {
+    pub new_admin: Pubkey,
+}
+
+#[event]
 pub struct EntityRegistered {
     pub entity: Pubkey,
     pub role: u8,
@@ -35,7 +54,23 @@ pub struct PatientCreated {
 }
 
 #[event]
+pub struct UserIdentityRegistered {
+    pub identity: Pubkey,
+    pub wallet: Pubkey,
+    pub role_class: u8,
+}
+
+#[event]
 pub struct ConsentGranted {
+    pub patient: Pubkey,
+    pub grantee: Pubkey,
+    pub scopes: u32,
+    pub expires_at: i64,
+}
+
+/// Emitted when an existing consent is modified (scopes / expiry change).
+#[event]
+pub struct ConsentUpdated {
     pub patient: Pubkey,
     pub grantee: Pubkey,
     pub scopes: u32,
@@ -117,6 +152,36 @@ pub struct ClaimRejected {
     pub claim: Pubkey,
     pub insurer: Pubkey,
     pub reason_code: u16,
+}
+
+/// Emitted when the insurer executes the SPL token transfer for an approved claim.
+#[event]
+pub struct ClaimSettled {
+    pub claim: Pubkey,
+    pub insurer: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct MedicalRecordAnchored {
+    pub record: Pubkey,
+    pub patient: Pubkey,
+    pub author: Pubkey,
+    pub record_type: u8,
+}
+
+#[event]
+pub struct MedicalRecordSuperseded {
+    pub record: Pubkey,
+    pub superseded_by: Pubkey,
+}
+
+#[event]
+pub struct AccessEventLogged {
+    pub event: Pubkey,
+    pub patient: Pubkey,
+    pub accessor: Pubkey,
+    pub access_kind: u8,
 }
 
 #[event]
