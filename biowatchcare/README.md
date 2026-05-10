@@ -171,6 +171,70 @@ Les utilisateurs peuvent signer via des clés gérées par l’app (custodial), 
 anchor build
 ```
 
+## Tests
+
+Tests locaux reproductibles :
+
+```sh
+npm test
+```
+
+Cette commande lance `anchor test`, démarre un validator local, déploie le programme puis exécute la suite `tests/biowatchcare.js`.
+
+Tests devnet :
+
+```sh
+npm run test:devnet
+```
+
+Prérequis devnet :
+- programme déployé à `E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX`,
+- wallet devnet financé via `ANCHOR_WALLET`,
+- optionnellement `DEVNET_RPC_URL`.
+
+## Web app MVP sans backend
+
+Une application web MVP est disponible dans [web/index.html](/home/ems/Images/estia/biowatchcare/web/index.html).
+
+Ce MVP fonctionne en direct avec Solana:
+- `@solana/web3.js` dans le navigateur,
+- connexion Phantom reelle pour le wallet acteur,
+- signature admin locale via import d'une `secret key` JSON,
+- aucune API backend.
+
+Configuration par defaut du MVP:
+- RPC: `https://api.devnet.solana.com`
+- Program ID: `E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX`
+
+Ce modele permet de faire fonctionner les transactions multisignatures du programme:
+- `admin` signe localement dans le navigateur,
+- l'acteur connecte avec Phantom signe aussi,
+- la transaction est envoyee directement au RPC Solana.
+
+Lancer l'interface:
+
+```sh
+npm run web
+```
+
+Ouvrir ensuite:
+
+```text
+http://127.0.0.1:8080
+```
+
+Flux recommande:
+1. Demarrer `solana-test-validator`
+2. Deployer le programme sur le meme RPC
+3. Ouvrir le MVP
+4. Connecter Phantom
+5. Choisir le mode admin:
+   - `Admin = wallet` si vous faites une demo mono-wallet
+   - `Admin importe` si vous voulez un admin distinct avec sa cle JSON locale
+6. Initialiser la config
+7. Enregistrer et approuver les roles
+8. Utiliser les onglets `Patient`, `Prescription` et `Facturation`
+
 ---
 
 ## Lancer le projet sur Windows (guide complet)

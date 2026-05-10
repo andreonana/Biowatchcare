@@ -1,5 +1,8 @@
 [programs.localnet]
-biowatchcare = "FhXSGiUzcvtAVqXM8tyy1HzUf4mFxkUQEvwgmjLRgow3"
+biowatchcare = "E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX"
+
+[programs.devnet]
+biowatchcare = "E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX"
 
 [provider]
 cluster = "localnet"
@@ -7,6 +10,16 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 build = "anchor build"
+test = "npm run test:mocha"
+
+[test]
+startup_wait = 20000
+
+[test.validator]
+bind_address = "127.0.0.1"
+rpc_port = 8898
+faucet_port = 9901
+gossip_port = 10200
 
 [toolchain]
 anchor_version = "0.31.1"

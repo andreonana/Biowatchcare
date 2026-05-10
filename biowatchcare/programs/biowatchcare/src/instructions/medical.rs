@@ -18,32 +18,13 @@ fn require_role(role_account: &EntityRole, expected: &[Role]) -> Result<()> {
     Ok(())
 }
 
-/// Purpose
-/// Create a prescription for a patient.
-/// Who signs / Who pays
-/// - Signers: admin, doctor
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - doctor: doctor signer
-/// - doctor_role: role PDA for doctor
-/// - patient: patient profile PDA
-/// - prescription: prescription PDA
-/// - system_program
-/// Preconditions / Access control
-/// - doctor_role must be Approved and role Doctor
-/// State changes
-/// - Create Prescription with Active status
-/// Events emitted
-/// - PrescriptionCreated
-/// Failure modes (ErrorCode)
-/// - RoleNotApproved, InvalidRole
-/// Security notes
-/// - Prescription payload stored off-chain (hash only)
+// ──────────────────────────────────────────────────────────────────────────────
+// add_prescription
+// ──────────────────────────────────────────────────────────────────────────────
+/// Doctor pays own rent. Admin no longer co-signs operational instructions.
 pub fn add_prescription(
     ctx: Context<AddPrescription>,
-    patient_id_hash: [u8; 32],
+    _patient_id_hash: [u8; 32],
     rx_hash: [u8; 32],
     pointer_hash: [u8; 32],
 ) -> Result<()> {
@@ -69,8 +50,8 @@ pub fn add_prescription(
 #[derive(Accounts)]
 #[instruction(patient_id_hash: [u8; 32], rx_hash: [u8; 32])]
 pub struct AddPrescription<'info> {
+    /// Doctor pays rent for the prescription account.
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub doctor: Signer<'info>,
     #[account(
         seeds = [ROLE_SEED, doctor.key().as_ref()],
@@ -85,7 +66,7 @@ pub struct AddPrescription<'info> {
     pub patient: Account<'info, PatientProfile>,
     #[account(
         init,
-        payer = admin,
+        payer = doctor,
         space = Prescription::SPACE,
         seeds = [RX_SEED, patient.key().as_ref(), rx_hash.as_ref()],
         bump
@@ -94,28 +75,9 @@ pub struct AddPrescription<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Purpose
-/// Cancel an existing prescription.
-/// Who signs / Who pays
-/// - Signers: admin, doctor
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - doctor: doctor signer
-/// - doctor_role: role PDA for doctor
-/// - prescription: prescription PDA
-/// Preconditions / Access control
-/// - doctor_role must be Approved and role Doctor
-/// - doctor must match prescription.doctor
-/// State changes
-/// - Set Prescription status to Cancelled
-/// Events emitted
-/// - PrescriptionCancelled
-/// Failure modes (ErrorCode)
-/// - RoleNotApproved, InvalidRole, Unauthorized, RxCancelled
-/// Security notes
-/// - Cancellation prevents QR issuance and dispense
+// ──────────────────────────────────────────────────────────────────────────────
+// cancel_prescription
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn cancel_prescription(ctx: Context<CancelPrescription>) -> Result<()> {
     require_role(&ctx.accounts.doctor_role, &[Role::Doctor])?;
     let rx = &mut ctx.accounts.prescription;
@@ -133,7 +95,6 @@ pub fn cancel_prescription(ctx: Context<CancelPrescription>) -> Result<()> {
 #[derive(Accounts)]
 pub struct CancelPrescription<'info> {
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub doctor: Signer<'info>,
     #[account(
         seeds = [ROLE_SEED, doctor.key().as_ref()],
@@ -145,30 +106,10 @@ pub struct CancelPrescription<'info> {
     pub prescription: Account<'info, Prescription>,
 }
 
-/// Purpose
-/// Issue a QR token for a prescription.
-/// Who signs / Who pays
-/// - Signers: admin, doctor
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - doctor: doctor signer
-/// - doctor_role: role PDA for doctor
-/// - prescription: prescription PDA
-/// - qr_token: QR token PDA
-/// - system_program
-/// Preconditions / Access control
-/// - doctor_role must be Approved and role Doctor
-/// - prescription must be Active
-/// State changes
-/// - Create QrToken with 48h expiry
-/// Events emitted
-/// - QrIssued
-/// Failure modes (ErrorCode)
-/// - RoleNotApproved, InvalidRole, RxCancelled
-/// Security notes
-/// - Token hash stored on-chain, payload off-chain
+// ──────────────────────────────────────────────────────────────────────────────
+// issue_qr_token
+// ──────────────────────────────────────────────────────────────────────────────
+/// Doctor pays rent for the QrToken account.
 pub fn issue_qr_token(
     ctx: Context<IssueQrToken>,
     token_hash: [u8; 32],
@@ -201,7 +142,6 @@ pub fn issue_qr_token(
 #[instruction(token_hash: [u8; 32])]
 pub struct IssueQrToken<'info> {
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub doctor: Signer<'info>,
     #[account(
         seeds = [ROLE_SEED, doctor.key().as_ref()],
@@ -213,7 +153,7 @@ pub struct IssueQrToken<'info> {
     pub prescription: Account<'info, Prescription>,
     #[account(
         init,
-        payer = admin,
+        payer = doctor,
         space = QrToken::SPACE,
         seeds = [QR_SEED, prescription.key().as_ref(), token_hash.as_ref()],
         bump
@@ -222,27 +162,9 @@ pub struct IssueQrToken<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Purpose
-/// Verify a QR token without consuming it.
-/// Who signs / Who pays
-/// - Signers: admin, pharmacist
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - pharmacist: pharmacist signer
-/// - pharmacist_role: role PDA for pharmacist
-/// - qr_token: QR token PDA
-/// Preconditions / Access control
-/// - pharmacist_role must be Approved and role Pharmacist
-/// State changes
-/// - None (read-only)
-/// Events emitted
-/// - QrVerified
-/// Failure modes (ErrorCode)
-/// - RoleNotApproved, InvalidRole, QrExpired, QrAlreadyUsed
-/// Security notes
-/// - Emits validity signal without revealing payload
+// ──────────────────────────────────────────────────────────────────────────────
+// verify_qr_token  (read-only — no new account)
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn verify_qr_token(ctx: Context<VerifyQrToken>) -> Result<()> {
     require_role(&ctx.accounts.pharmacist_role, &[Role::Pharmacist])?;
 
@@ -278,7 +200,6 @@ pub fn verify_qr_token(ctx: Context<VerifyQrToken>) -> Result<()> {
 #[derive(Accounts)]
 pub struct VerifyQrToken<'info> {
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub pharmacist: Signer<'info>,
     #[account(
         seeds = [ROLE_SEED, pharmacist.key().as_ref()],
@@ -289,30 +210,10 @@ pub struct VerifyQrToken<'info> {
     pub qr_token: Account<'info, QrToken>,
 }
 
-/// Purpose
-/// Dispense medication using a valid QR token.
-/// Who signs / Who pays
-/// - Signers: admin, pharmacist
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - pharmacist: pharmacist signer
-/// - pharmacist_role: role PDA for pharmacist
-/// - qr_token: QR token PDA (mutable)
-/// - dispense: dispense PDA
-/// - system_program
-/// Preconditions / Access control
-/// - pharmacist_role must be Approved and role Pharmacist
-/// - qr_token must be valid and unused
-/// State changes
-/// - Mark QrToken used and create Dispense
-/// Events emitted
-/// - QrUsed, Dispensed
-/// Failure modes (ErrorCode)
-/// - RoleNotApproved, InvalidRole, QrExpired, QrAlreadyUsed
-/// Security notes
-/// - Dispense hash stored off-chain
+// ──────────────────────────────────────────────────────────────────────────────
+// dispense_with_qr
+// ──────────────────────────────────────────────────────────────────────────────
+/// Pharmacist pays rent for the Dispense record and consumes the QR token atomically.
 pub fn dispense_with_qr(
     ctx: Context<DispenseWithQr>,
     dispense_hash: [u8; 32],
@@ -349,7 +250,6 @@ pub fn dispense_with_qr(
 #[derive(Accounts)]
 pub struct DispenseWithQr<'info> {
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub pharmacist: Signer<'info>,
     #[account(
         seeds = [ROLE_SEED, pharmacist.key().as_ref()],
@@ -361,7 +261,7 @@ pub struct DispenseWithQr<'info> {
     pub qr_token: Account<'info, QrToken>,
     #[account(
         init,
-        payer = admin,
+        payer = pharmacist,
         space = Dispense::SPACE,
         seeds = [DISPENSE_SEED, qr_token.prescription.as_ref(), pharmacist.key().as_ref()],
         bump

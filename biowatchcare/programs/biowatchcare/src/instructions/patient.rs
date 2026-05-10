@@ -5,31 +5,14 @@ use crate::errors::ErrorCode;
 use crate::events::*;
 use crate::state::{Consent, PatientProfile};
 
-/// Purpose
-/// Grant or update consent for a grantee.
-/// Who signs / Who pays
-/// - Signers: admin, patient
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - patient_signer: patient signer
-/// - patient: patient profile PDA
-/// - consent: consent PDA
-/// - system_program
-/// Preconditions / Access control
-/// - scopes must be within VIEW_ALL
-/// State changes
-/// - Create/update Consent with scopes, expiry, revoked=false
-/// Events emitted
-/// - ConsentGranted
-/// Failure modes (ErrorCode)
-/// - InvalidScopes
-/// Security notes
-/// - Patient identity is verified off-chain; on-chain only hashes are stored
+// ──────────────────────────────────────────────────────────────────────────────
+// grant_consent  (creates a new Consent PDA — fails if already exists)
+// ──────────────────────────────────────────────────────────────────────────────
+/// Patient pays their own rent. No admin co-signature required for patient data.
+/// Use update_consent to modify an existing record.
 pub fn grant_consent(
     ctx: Context<GrantConsent>,
-    patient_id_hash: [u8; 32],
+    _patient_id_hash: [u8; 32],
     grantee_pubkey: Pubkey,
     scopes: u32,
     expires_at: i64,
@@ -57,8 +40,8 @@ pub fn grant_consent(
 #[derive(Accounts)]
 #[instruction(patient_id_hash: [u8; 32], grantee_pubkey: Pubkey)]
 pub struct GrantConsent<'info> {
+    /// Patient signs and pays rent — no admin co-signature.
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub patient_signer: Signer<'info>,
     #[account(
         seeds = [PATIENT_SEED, patient_id_hash.as_ref()],
@@ -66,8 +49,8 @@ pub struct GrantConsent<'info> {
     )]
     pub patient: Account<'info, PatientProfile>,
     #[account(
-        init_if_needed,
-        payer = admin,
+        init,
+        payer = patient_signer,
         space = Consent::SPACE,
         seeds = [CONSENT_SEED, patient.key().as_ref(), grantee_pubkey.as_ref()],
         bump
@@ -76,27 +59,58 @@ pub struct GrantConsent<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Purpose
-/// Revoke a consent for a grantee.
-/// Who signs / Who pays
-/// - Signers: admin, patient
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer
-/// - patient_signer: patient signer
-/// - patient: patient profile PDA
-/// - consent: consent PDA
-/// Preconditions / Access control
-/// - consent must exist
-/// State changes
-/// - Set consent.revoked = true
-/// Events emitted
-/// - ConsentRevoked
-/// Failure modes (ErrorCode)
-/// - ConsentMissing
-/// Security notes
-/// - Revocation is immediate on-chain
+// ──────────────────────────────────────────────────────────────────────────────
+// update_consent  (modifies an existing Consent PDA)
+// ──────────────────────────────────────────────────────────────────────────────
+/// Replaces init_if_needed: explicit update path avoids silent PDA state bugs.
+/// Also resets revoked = false, allowing re-activation with new terms.
+pub fn update_consent(
+    ctx: Context<UpdateConsent>,
+    _patient_id_hash: [u8; 32],
+    _grantee_pubkey: Pubkey,
+    scopes: u32,
+    expires_at: i64,
+) -> Result<()> {
+    require!((scopes & !VIEW_ALL) == 0 && scopes != 0, ErrorCode::InvalidScopes);
+
+    let consent = &mut ctx.accounts.consent;
+    let patient_key = consent.patient;
+    let grantee_key = consent.grantee;
+    consent.scopes = scopes;
+    consent.expires_at = expires_at;
+    consent.revoked = false;
+    consent.updated_at = Clock::get()?.unix_timestamp;
+
+    emit!(ConsentUpdated {
+        patient: patient_key,
+        grantee: grantee_key,
+        scopes,
+        expires_at,
+    });
+    Ok(())
+}
+
+#[derive(Accounts)]
+#[instruction(patient_id_hash: [u8; 32], grantee_pubkey: Pubkey)]
+pub struct UpdateConsent<'info> {
+    #[account(mut)]
+    pub patient_signer: Signer<'info>,
+    #[account(
+        seeds = [PATIENT_SEED, patient_id_hash.as_ref()],
+        bump = patient.bump
+    )]
+    pub patient: Account<'info, PatientProfile>,
+    #[account(
+        mut,
+        seeds = [CONSENT_SEED, patient.key().as_ref(), grantee_pubkey.as_ref()],
+        bump = consent.bump
+    )]
+    pub consent: Account<'info, Consent>,
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// revoke_consent
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn revoke_consent(
     ctx: Context<RevokeConsent>,
     _patient_id_hash: [u8; 32],
@@ -118,7 +132,6 @@ pub fn revoke_consent(
 #[instruction(patient_id_hash: [u8; 32], grantee_pubkey: Pubkey)]
 pub struct RevokeConsent<'info> {
     #[account(mut)]
-    pub admin: Signer<'info>,
     pub patient_signer: Signer<'info>,
     #[account(
         seeds = [PATIENT_SEED, patient_id_hash.as_ref()],

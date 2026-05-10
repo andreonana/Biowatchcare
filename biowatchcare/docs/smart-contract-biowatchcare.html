@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>BioWatchCare - Documentation du Smart Contract</title>
+  <style>
+    :root {
+      --ink: #15202b;
+      --muted: #4a5a68;
+      --line: #d7dee5;
+      --bg-soft: #f5f8fb;
+      --accent: #0f6c81;
+      --accent-soft: #e8f4f6;
+    }
+    @page {
+      margin: 1.6cm;
+    }
+    body {
+      font-family: "Liberation Sans", Arial, sans-serif;
+      color: var(--ink);
+      line-height: 1.45;
+      font-size: 11pt;
+      margin: 0;
+      padding: 0;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1, h2, h3, h4 {
+      color: var(--ink);
+      page-break-after: avoid;
+    }
+    h1 {
+      font-size: 22pt;
+      margin: 0 0 8px;
+    }
+    h2 {
+      font-size: 16pt;
+      margin-top: 28px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--line);
+    }
+    h3 {
+      font-size: 13pt;
+      margin-top: 22px;
+    }
+    h4 {
+      font-size: 11.5pt;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    ul, ol {
+      margin: 8px 0 8px 20px;
+    }
+    li {
+      margin: 4px 0;
+    }
+    .cover {
+      padding: 12px 0 24px;
+      border-bottom: 3px solid var(--accent);
+      margin-bottom: 24px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 12pt;
+      margin: 0;
+    }
+    .meta {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: var(--bg-soft);
+      border-left: 4px solid var(--accent);
+    }
+    .box {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      margin: 12px 0;
+    }
+    .small {
+      color: var(--muted);
+      font-size: 10pt;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 10.5pt;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: var(--accent-soft);
+    }
+    code {
+      font-family: "Liberation Mono", monospace;
+      font-size: 10pt;
+      background: #f1f4f7;
+      padding: 1px 4px;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .diagram {
+      margin: 16px 0 22px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .diagram svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .caption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 10pt;
+    }
+    .annex-header {
+      margin-top: 28px;
+      padding: 10px 12px;
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="cover">
+      <h1>BioWatchCare</h1>
+      <p class="subtitle">Documentation claire du smart contract Solana / Anchor</p>
+      <div class="meta">
+        <p><strong>Programme ID</strong> : <code>E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX</code></p>
+        <p><strong>Framework</strong> : Anchor sur Solana</p>
+        <p><strong>Version documentée</strong> : état actuel du dépôt au 9 mars 2026</p>
+        <p><strong>But métier</strong> : fournir une base on-chain pour un carnet de santé numérique, avec consentement, prescriptions, dispensation, facturation, remboursement et audit.</p>
+      </div>
+    </section>
+
+    <h2>1. Résumé exécutif</h2>
+    <p>
+      Ce smart contract ne stocke pas les données médicales lisibles en clair. Il stocke surtout des
+      <strong>preuves</strong>, des <strong>hashes</strong>, des <strong>permissions</strong>, des <strong>statuts</strong>,
+      des <strong>liens logiques</strong> entre acteurs et patients, ainsi qu’un <strong>journal d’audit</strong>.
+    </p>
+    <p>
+      C’est la bonne base pour une architecture où l’utilisateur final se connecte avec <strong>email + mot de passe</strong>
+      dans une application classique, pendant que la blockchain fonctionne en arrière-plan via un backend custodial.
+    </p>
+
+    <div class="box">
+      <strong>Idée centrale :</strong> la blockchain sert ici de registre de confiance. Elle ne remplace ni la base de données
+      applicative, ni le stockage chiffré des dossiers médicaux.
+    </div>
+
+    <h2>2. Ce que fait le contrat</h2>
+    <ul>
+      <li>Initialiser la configuration globale du programme.</li>
+      <li>Gérer les rôles des entités autorisées : hôpital, assureur, médecin, pharmacien.</li>
+      <li>Créer un profil patient pseudonymisé via un hash d’identifiant.</li>
+      <li>Gérer les consentements d’accès à certaines catégories de données.</li>
+      <li>Ancrer des prescriptions médicales sous forme de hash et pointeur hors chaîne.</li>
+      <li>Émettre et vérifier des QR tokens pour la dispensation pharmaceutique.</li>
+      <li>Créer des factures et traiter des demandes de remboursement.</li>
+      <li>Enregistrer des identités custodiales liées à des utilisateurs applicatifs.</li>
+      <li>Ancrer des documents médicaux génériques.</li>
+      <li>Journaliser les accès à des ressources médicales.</li>
+    </ul>
+
+    <h2>3. Ce que le contrat ne doit pas faire</h2>
+    <ul>
+      <li>Stocker les noms, adresses, numéros de téléphone ou emails des patients en clair.</li>
+      <li>Stocker les comptes rendus médicaux complets, PDF, images ou analyses détaillées.</li>
+      <li>Gérer l’authentification email / mot de passe.</li>
+      <li>Remplacer la logique applicative de chiffrement, de session ou de récupération de compte.</li>
+    </ul>
+
+    <h2>4. Architecture recommandée autour de ce contrat</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Couche</th>
+          <th>Responsabilité</th>
+          <th>Exemples</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Frontend</td>
+          <td>Interface utilisateur, formulaires, consultation, workflow produit.</td>
+          <td>Connexion email, tableau de bord patient, consultation de dossier.</td>
+        </tr>
+        <tr>
+          <td>Backend</td>
+          <td>Authentification, wallets custodiaux, chiffrement, stockage métier, envoi des transactions Solana.</td>
+          <td>Node/Express, Postgres, stockage objet chiffré, KMS/Vault.</td>
+        </tr>
+        <tr>
+          <td>Blockchain</td>
+          <td>Preuve, audit, consentement, statuts, ancrage de documents et traçabilité.</td>
+          <td>PDAs Anchor, événements, rôles et journaux d’accès.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="diagram">
+      <svg viewBox="0 0 920 360" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#0f6c81"/>
+          </marker>
+        </defs>
+        <rect x="20" y="40" width="250" height="210" rx="16" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="145" y="75" text-anchor="middle" font-size="22" font-weight="700" fill="#15202b">Frontend Web / Mobile</text>
+        <text x="145" y="110" text-anchor="middle" font-size="15" fill="#4a5a68">Connexion email + mot de passe</text>
+        <text x="145" y="138" text-anchor="middle" font-size="15" fill="#4a5a68">Formulaires patient / médecin</text>
+        <text x="145" y="166" text-anchor="middle" font-size="15" fill="#4a5a68">Consultation des dossiers</text>
+        <text x="145" y="194" text-anchor="middle" font-size="15" fill="#4a5a68">Aucune exposition du wallet</text>
+
+        <rect x="334" y="25" width="260" height="250" rx="16" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="464" y="60" text-anchor="middle" font-size="22" font-weight="700" fill="#15202b">Backend Custodial</text>
+        <text x="464" y="95" text-anchor="middle" font-size="15" fill="#4a5a68">Auth, sessions, rôles applicatifs</text>
+        <text x="464" y="123" text-anchor="middle" font-size="15" fill="#4a5a68">Wallets gérés par la plateforme</text>
+        <text x="464" y="151" text-anchor="middle" font-size="15" fill="#4a5a68">Chiffrement et stockage off-chain</text>
+        <text x="464" y="179" text-anchor="middle" font-size="15" fill="#4a5a68">Construction et envoi des transactions</text>
+        <text x="464" y="207" text-anchor="middle" font-size="15" fill="#4a5a68">Audit et orchestration métier</text>
+
+        <rect x="660" y="40" width="240" height="210" rx="16" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="780" y="75" text-anchor="middle" font-size="22" font-weight="700" fill="#15202b">Solana / Anchor</text>
+        <text x="780" y="110" text-anchor="middle" font-size="15" fill="#4a5a68">Rôles et consentements</text>
+        <text x="780" y="138" text-anchor="middle" font-size="15" fill="#4a5a68">Hashes et ancres médicales</text>
+        <text x="780" y="166" text-anchor="middle" font-size="15" fill="#4a5a68">QR, factures, claims</text>
+        <text x="780" y="194" text-anchor="middle" font-size="15" fill="#4a5a68">Journal d'accès</text>
+
+        <line x1="270" y1="145" x2="334" y2="145" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow)"/>
+        <line x1="594" y1="145" x2="660" y2="145" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow)"/>
+        <line x1="660" y1="175" x2="594" y2="175" stroke="#4a5a68" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="334" y1="175" x2="270" y2="175" stroke="#4a5a68" stroke-width="2" marker-end="url(#arrow)"/>
+
+        <rect x="320" y="300" width="290" height="42" rx="12" fill="#15202b"/>
+        <text x="465" y="327" text-anchor="middle" font-size="15" fill="#ffffff">Base métier + stockage chiffré hors chaîne</text>
+      </svg>
+      <p class="caption">Diagramme d’architecture cible : le frontend parle au backend, et le backend pilote la blockchain sans imposer de wallet à l’utilisateur final.</p>
+    </div>
+
+    <h2>5. Objets on-chain et rôle de chacun</h2>
+
+    <h3>5.1 GlobalConfig</h3>
+    <p>
+      Compte global du programme. Il contient l’administrateur principal et le seuil de remboursement automatique.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Champ</th>
+          <th>Type</th>
+          <th>Utilité</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>admin</code></td><td>Pubkey</td><td>Autorité centrale du programme.</td></tr>
+        <tr><td><code>auto_reimb_threshold</code></td><td>u64</td><td>Montant maximal auto-approuvé pour un claim.</td></tr>
+        <tr><td><code>bump</code></td><td>u8</td><td>Bump PDA Anchor.</td></tr>
+        <tr><td><code>created_at</code></td><td>i64</td><td>Date de création.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.2 EntityRole</h3>
+    <p>
+      Répertoire des entités métier autorisées. Une entité peut être <code>Hospital</code>, <code>Insurer</code>,
+      <code>Doctor</code> ou <code>Pharmacist</code>.
+    </p>
+
+    <h3>5.3 PatientProfile</h3>
+    <p>
+      Représente un patient de manière pseudonymisée. Le patient n’est pas identifié par son nom, mais par
+      un <code>patient_id_hash</code>.
+    </p>
+
+    <h3>5.4 Consent</h3>
+    <p>
+      Autorisation accordée à un tiers pour consulter certaines catégories d’informations du patient.
+      Le consentement inclut un <strong>bitmask de scopes</strong>, une date d’expiration éventuelle et un indicateur de révocation.
+    </p>
+
+    <h3>5.5 Prescription</h3>
+    <p>
+      Ancre une ordonnance créée par un médecin approuvé. Le contenu réel reste hors chaîne, le contrat conserve
+      seulement le hash et un pointeur hashé.
+    </p>
+
+    <h3>5.6 QrToken</h3>
+    <p>
+      Jeton temporaire, valable 48 heures, utilisé pour sécuriser la délivrance d’une ordonnance en pharmacie.
+    </p>
+
+    <h3>5.7 Dispense</h3>
+    <p>
+      Trace la dispensation effective d’un médicament après utilisation d’un QR token valide.
+    </p>
+
+    <h3>5.8 Invoice</h3>
+    <p>
+      Enregistre une facture associée à un patient, avec son montant et sa devise.
+    </p>
+
+    <h3>5.9 ClaimStatus</h3>
+    <p>
+      Suit la décision de remboursement prise par l’assureur. Le claim peut être auto-approuvé, en attente,
+      approuvé ou rejeté.
+    </p>
+
+    <h3>5.10 UserIdentity</h3>
+    <p>
+      Nouveau compte ajouté pour le modèle custodial. Il relie un utilisateur applicatif hors chaîne
+      à un wallet Solana contrôlé par votre plateforme.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Champ</th>
+          <th>Type</th>
+          <th>Utilité</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>app_user_id_hash</code></td><td>[u8; 32]</td><td>Hash de l’identifiant utilisateur applicatif.</td></tr>
+        <tr><td><code>wallet</code></td><td>Pubkey</td><td>Wallet custodial associé.</td></tr>
+        <tr><td><code>role_class</code></td><td>Enum</td><td>Classe métier globale : patient, practitioner, operator.</td></tr>
+        <tr><td><code>status</code></td><td>Enum</td><td>Active ou Suspended.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.11 MedicalRecordAnchor</h3>
+    <p>
+      Nouveau compte générique pour ancrer n’importe quel document de santé : consultation, labo, imagerie,
+      vaccination, note clinique, document externe.
+    </p>
+
+    <h3>5.12 AccessEvent</h3>
+    <p>
+      Nouveau compte d’audit. Il journalise un accès à une ressource médicale pour un patient donné.
+      Il conserve qui a accédé, à quoi, de quelle manière, et quand.
+    </p>
+
+    <h2>6. Énumérations importantes</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Enum</th>
+          <th>Valeurs</th>
+          <th>Rôle</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>Role</code></td><td>Hospital, Insurer, Doctor, Pharmacist</td><td>Rôles métier des entités.</td></tr>
+        <tr><td><code>EntityStatus</code></td><td>Pending, Approved, Revoked</td><td>Cycle de vie d’une entité.</td></tr>
+        <tr><td><code>UserRoleClass</code></td><td>Patient, Practitioner, Operator</td><td>Classe large de l’identité applicative.</td></tr>
+        <tr><td><code>IdentityStatus</code></td><td>Active, Suspended</td><td>Activation d’une identité custodiale.</td></tr>
+        <tr><td><code>RecordType</code></td><td>Consultation, LabResult, Imaging, Vaccination, ClinicalNote, ExternalDocument</td><td>Nature du document médical ancré.</td></tr>
+        <tr><td><code>RecordStatus</code></td><td>Active, Archived, Superseded</td><td>État du document médical.</td></tr>
+        <tr><td><code>AccessKind</code></td><td>Read, Write, Share, Export</td><td>Type d’accès journalisé.</td></tr>
+        <tr><td><code>ClaimDecision</code></td><td>AutoApproved, Pending, Approved, Rejected</td><td>Décision assureur.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>7. Permissions et scopes</h2>
+    <p>Le contrat définit trois scopes de consentement :</p>
+    <ul>
+      <li><code>VIEW_RECORDS</code> : accès aux dossiers médicaux.</li>
+      <li><code>VIEW_PRESCRIPTIONS</code> : accès aux ordonnances.</li>
+      <li><code>VIEW_INVOICES</code> : accès aux factures.</li>
+    </ul>
+    <p>
+      <code>VIEW_ALL</code> combine les trois. Le consentement est stocké comme un bitmask, ce qui permet
+      d’exprimer plusieurs permissions dans une seule valeur.
+    </p>
+
+    <h2>8. Fonctions du smart contract</h2>
+
+    <h3>8.1 Administration</h3>
+    <h4><code>initialize_config(threshold: Option&lt;u64&gt;)</code></h4>
+    <p><strong>But :</strong> créer la configuration globale du programme.</p>
+    <p><strong>Utilisation :</strong> à exécuter une seule fois au déploiement.</p>
+    <p><strong>Effet :</strong> crée le PDA <code>GlobalConfig</code> et fixe l’admin.</p>
+
+    <h4><code>set_threshold(new_threshold: u64)</code></h4>
+    <p><strong>But :</strong> modifier le seuil d’auto-remboursement.</p>
+    <p><strong>Utilité métier :</strong> automatiser les petits remboursements et laisser les gros montants en revue manuelle.</p>
+
+    <h4><code>register_entity(role, entity_pubkey, metadata_hash)</code></h4>
+    <p><strong>But :</strong> enregistrer une entité métier avec statut initial <code>Pending</code>.</p>
+    <p><strong>Exemple :</strong> enregistrer un médecin ou un hôpital avant validation finale par l’administrateur.</p>
+
+    <h4><code>approve_entity()</code></h4>
+    <p><strong>But :</strong> approuver une entité et l’autoriser à agir dans le système.</p>
+
+    <h4><code>revoke_entity()</code></h4>
+    <p><strong>But :</strong> révoquer une entité.</p>
+    <p><strong>Effet :</strong> l’entité reste référencée on-chain mais ne peut plus effectuer d’actions protégées.</p>
+
+    <h3>8.2 Gestion patient et consentement</h3>
+    <h4><code>create_patient_profile(patient_id_hash)</code></h4>
+    <p><strong>But :</strong> créer le profil pseudonymisé d’un patient.</p>
+    <p><strong>Qui peut le faire :</strong> un hôpital ou un assureur approuvé.</p>
+
+    <h4><code>grant_consent(patient_id_hash, grantee_pubkey, scopes, expires_at)</code></h4>
+    <p><strong>But :</strong> donner l’autorisation à un tiers d’accéder à certaines catégories de données.</p>
+    <p><strong>Point clé :</strong> le patient signe, mais dans un modèle custodial cette signature peut être émise par votre backend au nom du patient.</p>
+
+    <h4><code>revoke_consent(patient_id_hash, grantee_pubkey)</code></h4>
+    <p><strong>But :</strong> retirer un consentement existant.</p>
+
+    <h3>8.3 Parcours prescription et pharmacie</h3>
+    <h4><code>add_prescription(patient_id_hash, rx_hash, pointer_hash)</code></h4>
+    <p><strong>But :</strong> ancrer une ordonnance pour un patient.</p>
+    <p><strong>Données stockées :</strong> uniquement le hash de l’ordonnance et un hash de pointeur vers le stockage off-chain.</p>
+
+    <h4><code>cancel_prescription()</code></h4>
+    <p><strong>But :</strong> annuler une ordonnance active.</p>
+
+    <h4><code>issue_qr_token(token_hash)</code></h4>
+    <p><strong>But :</strong> créer un QR token expirant au bout de 48 heures.</p>
+
+    <h4><code>verify_qr_token()</code></h4>
+    <p><strong>But :</strong> vérifier qu’un QR token est toujours valide sans le consommer.</p>
+
+    <h4><code>dispense_with_qr(dispense_hash)</code></h4>
+    <p><strong>But :</strong> enregistrer la dispensation d’un médicament et marquer le QR token comme utilisé.</p>
+
+    <h3>8.4 Facturation et remboursement</h3>
+    <h4><code>create_invoice(patient_id_hash, invoice_hash, amount, currency_code)</code></h4>
+    <p><strong>But :</strong> créer une facture rattachée à un patient.</p>
+
+    <h4><code>auto_or_pending_claim(insurer)</code></h4>
+    <p><strong>But :</strong> ouvrir une demande de remboursement.</p>
+    <p>
+      Si le montant de la facture est inférieur ou égal au seuil global, le claim est immédiatement
+      <code>AutoApproved</code>. Sinon, il passe à <code>Pending</code>.
+    </p>
+
+    <h4><code>insurer_decide_claim(approve, reason_code)</code></h4>
+    <p><strong>But :</strong> permettre à l’assureur de statuer sur un claim en attente.</p>
+    <p><strong>Comportement :</strong> le code motif n’est utilisé qu’en cas de rejet.</p>
+
+    <h3>8.5 Nouvelles fonctions pour le modèle carnet de santé custodial</h3>
+    <h4><code>register_user_identity(app_user_id_hash, wallet, role_class)</code></h4>
+    <p>
+      Associe un utilisateur applicatif à un wallet géré par la plateforme. C’est l’un des pivots du modèle
+      où l’utilisateur final se connecte avec email et mot de passe sans manipuler de wallet.
+    </p>
+
+    <h4><code>add_medical_record_anchor(patient_id_hash, record_type, record_hash, pointer_hash, version)</code></h4>
+    <p>
+      Ajoute une ancre générique de document médical. Cela permet de gérer plus qu’une simple ordonnance :
+      consultation, résultats, documents externes, etc.
+    </p>
+
+    <h4><code>supersede_medical_record(superseded_by)</code></h4>
+    <p>
+      Marque un document médical comme remplacé par une nouvelle version ou un nouvel enregistrement.
+      Très utile quand un document a été corrigé ou mis à jour.
+    </p>
+
+    <h4><code>log_access_event(patient_id_hash, access_kind, resource_hash)</code></h4>
+    <p>
+      Journalise un accès à une ressource médicale. L’événement est dérivé par
+      <code>patient + accessor + resource_hash</code>.
+    </p>
+    <p>
+      Cela permet de prouver qu’un acteur donné a consulté, modifié, partagé ou exporté une ressource
+      liée à un patient.
+    </p>
+
+    <h2>9. Schémas visuels des flux</h2>
+
+    <h3>9.1 Flux global dossier médical</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 920 280" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#0f6c81"/>
+          </marker>
+        </defs>
+        <rect x="20" y="90" width="150" height="70" rx="14" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="95" y="122" text-anchor="middle" font-size="18" font-weight="700">Patient</text>
+        <text x="95" y="145" text-anchor="middle" font-size="13">consentement</text>
+
+        <rect x="220" y="90" width="170" height="70" rx="14" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="305" y="122" text-anchor="middle" font-size="18" font-weight="700">Médecin / Hôpital</text>
+        <text x="305" y="145" text-anchor="middle" font-size="13">création dossier / prescription</text>
+
+        <rect x="440" y="90" width="160" height="70" rx="14" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="520" y="122" text-anchor="middle" font-size="18" font-weight="700">Backend</text>
+        <text x="520" y="145" text-anchor="middle" font-size="13">chiffre et signe</text>
+
+        <rect x="650" y="90" width="120" height="70" rx="14" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="710" y="122" text-anchor="middle" font-size="18" font-weight="700">Solana</text>
+        <text x="710" y="145" text-anchor="middle" font-size="13">hash + audit</text>
+
+        <rect x="790" y="90" width="110" height="70" rx="14" fill="#15202b"/>
+        <text x="845" y="122" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">Storage</text>
+        <text x="845" y="145" text-anchor="middle" font-size="13" fill="#fff">données chiffrées</text>
+
+        <line x1="170" y1="125" x2="220" y2="125" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow2)"/>
+        <line x1="390" y1="125" x2="440" y2="125" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow2)"/>
+        <line x1="600" y1="110" x2="650" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow2)"/>
+        <line x1="600" y1="140" x2="790" y2="140" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow2)"/>
+
+        <text x="275" y="72" text-anchor="middle" font-size="13" fill="#4a5a68">1. autorise / consulte</text>
+        <text x="500" y="72" text-anchor="middle" font-size="13" fill="#4a5a68">2. prépare l’opération</text>
+        <text x="706" y="72" text-anchor="middle" font-size="13" fill="#4a5a68">3. ancre la preuve</text>
+        <text x="845" y="72" text-anchor="middle" font-size="13" fill="#4a5a68">4. conserve le contenu</text>
+      </svg>
+      <p class="caption">Flux cible : les données complètes restent hors chaîne, la blockchain conserve la preuve, le contrôle d’accès et la traçabilité.</p>
+    </div>
+
+    <h3>9.2 Parcours patient</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 920 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#0f6c81"/>
+          </marker>
+        </defs>
+        <rect x="20" y="80" width="140" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="90" y="116" text-anchor="middle" font-size="16" font-weight="700">Créer compte</text>
+        <rect x="200" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="275" y="107" text-anchor="middle" font-size="16" font-weight="700">Profil patient</text>
+        <text x="275" y="127" text-anchor="middle" font-size="13">hashé on-chain</text>
+        <rect x="390" y="80" width="150" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="465" y="107" text-anchor="middle" font-size="16" font-weight="700">Consentement</text>
+        <text x="465" y="127" text-anchor="middle" font-size="13">grant / revoke</text>
+        <rect x="580" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="655" y="107" text-anchor="middle" font-size="16" font-weight="700">Consulter dossier</text>
+        <text x="655" y="127" text-anchor="middle" font-size="13">hors chaîne</text>
+        <rect x="770" y="80" width="130" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="835" y="107" text-anchor="middle" font-size="16" font-weight="700">Historique</text>
+        <text x="835" y="127" text-anchor="middle" font-size="13">audit d’accès</text>
+
+        <line x1="160" y1="110" x2="200" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow3)"/>
+        <line x1="350" y1="110" x2="390" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow3)"/>
+        <line x1="540" y1="110" x2="580" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow3)"/>
+        <line x1="730" y1="110" x2="770" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow3)"/>
+      </svg>
+      <p class="caption">Le patient ne manipule pas la blockchain directement. Il gère son accès et consulte son dossier comme dans une application classique.</p>
+    </div>
+
+    <h3>9.3 Parcours médecin</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 920 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#0f6c81"/>
+          </marker>
+        </defs>
+        <rect x="20" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="95" y="107" text-anchor="middle" font-size="16" font-weight="700">Rôle approuvé</text>
+        <text x="95" y="127" text-anchor="middle" font-size="13">Doctor / Hospital</text>
+        <rect x="210" y="80" width="150" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="285" y="107" text-anchor="middle" font-size="16" font-weight="700">Consulter patient</text>
+        <text x="285" y="127" text-anchor="middle" font-size="13">si consentement</text>
+        <rect x="400" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="475" y="107" text-anchor="middle" font-size="16" font-weight="700">Créer record</text>
+        <text x="475" y="127" text-anchor="middle" font-size="13">ou prescription</text>
+        <rect x="590" y="80" width="150" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="665" y="107" text-anchor="middle" font-size="16" font-weight="700">Ancrer hash</text>
+        <text x="665" y="127" text-anchor="middle" font-size="13">sur Solana</text>
+        <rect x="780" y="80" width="120" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="840" y="107" text-anchor="middle" font-size="16" font-weight="700">Mettre à jour</text>
+        <text x="840" y="127" text-anchor="middle" font-size="13">ou remplacer</text>
+
+        <line x1="170" y1="110" x2="210" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow4)"/>
+        <line x1="360" y1="110" x2="400" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow4)"/>
+        <line x1="550" y1="110" x2="590" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow4)"/>
+        <line x1="740" y1="110" x2="780" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow4)"/>
+      </svg>
+      <p class="caption">Le médecin alimente le carnet via des documents hashés et des prescriptions, avec traçabilité complète.</p>
+    </div>
+
+    <h3>9.4 Parcours pharmacien</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 920 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow5" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#0f6c81"/>
+          </marker>
+        </defs>
+        <rect x="20" y="80" width="160" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="100" y="107" text-anchor="middle" font-size="16" font-weight="700">Rôle pharmacien</text>
+        <text x="100" y="127" text-anchor="middle" font-size="13">approuvé</text>
+        <rect x="220" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="295" y="107" text-anchor="middle" font-size="16" font-weight="700">Scanner QR</text>
+        <text x="295" y="127" text-anchor="middle" font-size="13">token</text>
+        <rect x="410" y="80" width="150" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="485" y="107" text-anchor="middle" font-size="16" font-weight="700">Vérifier validité</text>
+        <text x="485" y="127" text-anchor="middle" font-size="13">non expiré / non utilisé</text>
+        <rect x="600" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="675" y="107" text-anchor="middle" font-size="16" font-weight="700">Dispense</text>
+        <text x="675" y="127" text-anchor="middle" font-size="13">marque le token utilisé</text>
+        <rect x="790" y="80" width="110" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="845" y="107" text-anchor="middle" font-size="16" font-weight="700">Audit</text>
+        <text x="845" y="127" text-anchor="middle" font-size="13">trace finale</text>
+
+        <line x1="180" y1="110" x2="220" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow5)"/>
+        <line x1="370" y1="110" x2="410" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow5)"/>
+        <line x1="560" y1="110" x2="600" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow5)"/>
+        <line x1="750" y1="110" x2="790" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow5)"/>
+      </svg>
+      <p class="caption">Le pharmacien vérifie le QR token avant dispensation, puis la consommation du token empêche les usages multiples.</p>
+    </div>
+
+    <h3>9.5 Parcours assureur</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 920 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#0f6c81"/>
+          </marker>
+        </defs>
+        <rect x="20" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="95" y="107" text-anchor="middle" font-size="16" font-weight="700">Rôle assureur</text>
+        <text x="95" y="127" text-anchor="middle" font-size="13">approuvé</text>
+        <rect x="210" y="80" width="170" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="295" y="107" text-anchor="middle" font-size="16" font-weight="700">Recevoir claim</text>
+        <text x="295" y="127" text-anchor="middle" font-size="13">auto ou pending</text>
+        <rect x="420" y="80" width="150" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="495" y="107" text-anchor="middle" font-size="16" font-weight="700">Analyser</text>
+        <text x="495" y="127" text-anchor="middle" font-size="13">politique métier</text>
+        <rect x="610" y="80" width="150" height="60" rx="12" fill="#e8f4f6" stroke="#0f6c81" stroke-width="2"/>
+        <text x="685" y="107" text-anchor="middle" font-size="16" font-weight="700">Approuver</text>
+        <text x="685" y="127" text-anchor="middle" font-size="13">ou rejeter</text>
+        <rect x="800" y="80" width="100" height="60" rx="12" fill="#f5f8fb" stroke="#0f6c81" stroke-width="2"/>
+        <text x="850" y="107" text-anchor="middle" font-size="16" font-weight="700">Tracer</text>
+        <text x="850" y="127" text-anchor="middle" font-size="13">la décision</text>
+
+        <line x1="170" y1="110" x2="210" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow6)"/>
+        <line x1="380" y1="110" x2="420" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow6)"/>
+        <line x1="570" y1="110" x2="610" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow6)"/>
+        <line x1="760" y1="110" x2="800" y2="110" stroke="#0f6c81" stroke-width="3" marker-end="url(#arrow6)"/>
+      </svg>
+      <p class="caption">Le claim suit un cycle simple : auto-approbation sous seuil, sinon décision assureur avec motif éventuel de rejet.</p>
+    </div>
+
+    <h2>10. PDAs utilisés</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Compte</th>
+          <th>Seeds</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>GlobalConfig</code></td><td><code>["config"]</code></td></tr>
+        <tr><td><code>UserIdentity</code></td><td><code>["user_identity", app_user_id_hash]</code></td></tr>
+        <tr><td><code>EntityRole</code></td><td><code>["role", entity_pubkey]</code></td></tr>
+        <tr><td><code>PatientProfile</code></td><td><code>["patient", patient_id_hash]</code></td></tr>
+        <tr><td><code>Consent</code></td><td><code>["consent", patient_pda, grantee_pubkey]</code></td></tr>
+        <tr><td><code>MedicalRecordAnchor</code></td><td><code>["record", patient_pda, record_hash]</code></td></tr>
+        <tr><td><code>Prescription</code></td><td><code>["rx", patient_pda, rx_hash]</code></td></tr>
+        <tr><td><code>QrToken</code></td><td><code>["qr", prescription_pda, token_hash]</code></td></tr>
+        <tr><td><code>Dispense</code></td><td><code>["dispense", prescription_pda, pharmacist_pubkey]</code></td></tr>
+        <tr><td><code>Invoice</code></td><td><code>["invoice", patient_pda, invoice_hash]</code></td></tr>
+        <tr><td><code>ClaimStatus</code></td><td><code>["claim", invoice_pda, insurer_pubkey]</code></td></tr>
+        <tr><td><code>AccessEvent</code></td><td><code>["access_event", patient_pda, accessor_pubkey, resource_hash]</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>11. Événements émis</h2>
+    <p>
+      Chaque événement Anchor permet de suivre l’activité on-chain sans relire tous les comptes à chaque fois.
+      Les événements principaux sont :
+    </p>
+    <ul>
+      <li><code>ConfigInitialized</code>, <code>ThresholdUpdated</code></li>
+      <li><code>EntityRegistered</code>, <code>EntityApproved</code>, <code>EntityRevoked</code></li>
+      <li><code>PatientCreated</code></li>
+      <li><code>ConsentGranted</code>, <code>ConsentRevoked</code></li>
+      <li><code>PrescriptionCreated</code>, <code>PrescriptionCancelled</code></li>
+      <li><code>QrIssued</code>, <code>QrVerified</code>, <code>QrUsed</code></li>
+      <li><code>Dispensed</code></li>
+      <li><code>InvoiceCreated</code>, <code>ClaimAutoApproved</code>, <code>ClaimPending</code>, <code>ClaimApproved</code>, <code>ClaimRejected</code></li>
+      <li><code>UserIdentityRegistered</code>, <code>MedicalRecordAnchored</code>, <code>MedicalRecordSuperseded</code>, <code>AccessEventLogged</code></li>
+    </ul>
+
+    <h2>12. Gestion des erreurs</h2>
+    <p>Le contrat définit plusieurs erreurs métier explicites :</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Erreur</th>
+          <th>Signification</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>NotAdmin</code></td><td>L’appelant n’est pas l’administrateur configuré.</td></tr>
+        <tr><td><code>Unauthorized</code></td><td>L’acteur signataire n’est pas autorisé pour cette action.</td></tr>
+        <tr><td><code>RoleNotApproved</code></td><td>Le rôle métier existe mais n’est pas approuvé.</td></tr>
+        <tr><td><code>InvalidRole</code></td><td>Le rôle métier ne correspond pas à l’instruction.</td></tr>
+        <tr><td><code>ConsentMissing</code></td><td>Le consentement attendu n’existe pas.</td></tr>
+        <tr><td><code>ConsentExpired</code></td><td>Le consentement est expiré.</td></tr>
+        <tr><td><code>ConsentRevoked</code></td><td>Le consentement a été révoqué.</td></tr>
+        <tr><td><code>InvalidScopes</code></td><td>Le bitmask de scopes est invalide.</td></tr>
+        <tr><td><code>RxCancelled</code></td><td>L’ordonnance est déjà annulée ou non exploitable.</td></tr>
+        <tr><td><code>QrExpired</code></td><td>Le QR token est expiré.</td></tr>
+        <tr><td><code>QrAlreadyUsed</code></td><td>Le QR token a déjà été consommé.</td></tr>
+        <tr><td><code>InvalidCurrencyCode</code></td><td>Le code devise n’est pas valide.</td></tr>
+        <tr><td><code>ClaimAlreadyDecided</code></td><td>Le claim n’est plus en attente.</td></tr>
+        <tr><td><code>IdentityInactive</code></td><td>L’identité applicative liée au wallet n’est pas active.</td></tr>
+        <tr><td><code>RecordAlreadySuperseded</code></td><td>Le document médical est déjà remplacé ou non actif.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>13. Répartition recommandée des données</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>On-chain</th>
+          <th>Off-chain</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            Hash patient, hash documents, consentements, rôles, statuts, claims,
+            timestamps, journal d’accès, pointeurs hashés.
+          </td>
+          <td>
+            Emails, mots de passe, identité civile, documents médicaux lisibles,
+            PDF, imagerie, comptes rendus, pièces justificatives, sessions utilisateur.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>14. Lecture métier du contrat</h2>
+    <ol>
+      <li>L’admin initialise le système et approuve les acteurs.</li>
+      <li>Un hôpital ou un assureur crée un profil patient pseudonymisé.</li>
+      <li>Le patient accorde ou retire des consentements.</li>
+      <li>Un médecin crée des ordonnances ou des ancres de documents médicaux.</li>
+      <li>Un pharmacien vérifie puis consomme un QR token pour délivrer un traitement.</li>
+      <li>Un hôpital crée une facture.</li>
+      <li>Le système auto-approuve un claim si le montant est faible, sinon l’assureur tranche.</li>
+      <li>Chaque accès important peut être journalisé via <code>AccessEvent</code>.</li>
+    </ol>
+
+    <h2>15. Forces du design actuel</h2>
+    <ul>
+      <li>Bonne séparation entre preuve on-chain et données sensibles off-chain.</li>
+      <li>Modèle de rôles clair.</li>
+      <li>Pseudonymisation native des patients.</li>
+      <li>Workflow prescription → QR → dispensation cohérent.</li>
+      <li>Nouveau socle custodial compatible avec email + mot de passe côté produit.</li>
+      <li>Audit des accès désormais possible.</li>
+    </ul>
+
+    <h2>16. Limites actuelles à connaître</h2>
+    <ul>
+      <li>Le contrat ne gère pas lui-même l’authentification applicative.</li>
+      <li>Le chiffrement des dossiers médicaux doit être fait hors chaîne.</li>
+      <li>Le contrat ne stocke pas encore une liste explicite de versions reliées entre documents, seulement un champ <code>superseded_by</code>.</li>
+      <li>Le modèle d’audit actuel crée un événement unique par combinaison <code>patient + accessor + resource_hash</code>. Si vous voulez plusieurs lectures identiques historisées séparément, il faudra prévoir une clé plus riche.</li>
+    </ul>
+
+    <h2>17. Recommandation produit</h2>
+    <p>
+      Pour votre MVP, il faut conserver ce smart contract comme <strong>registre de confiance</strong>, puis construire autour :
+    </p>
+    <ul>
+      <li>une API backend avec authentification email / mot de passe,</li>
+      <li>des wallets custodiaux signant les transactions à la place des utilisateurs,</li>
+      <li>une base de données métier,</li>
+      <li>un stockage chiffré des documents médicaux,</li>
+      <li>une interface web centrée sur les dossiers et les workflows, pas sur la blockchain.</li>
+    </ul>
+
+    <div class="box">
+      <strong>Conclusion :</strong> le smart contract actuel est désormais adapté à une architecture de carnet de santé numérique
+      où la blockchain reste invisible pour l’utilisateur final, tout en apportant preuve, traçabilité, contrôle d’accès
+      et audit.
+    </div>
+
+    <div class="page-break"></div>
+    <div class="annex-header">Annexe A - Pour les développeurs</div>
+    <h2>18. Annexe technique développeurs</h2>
+    <p>Cette annexe vise l’équipe technique qui doit intégrer, maintenir ou faire évoluer le système.</p>
+    <h3>18.1 Points d’intégration backend</h3>
+    <ul>
+      <li>Le backend doit être le fee payer et l’orchestrateur des signatures.</li>
+      <li>Les wallets patients peuvent être custodiaux et liés à <code>UserIdentity</code>.</li>
+      <li>Les documents médicaux doivent être chiffrés avant stockage off-chain.</li>
+      <li>Le backend doit conserver la table de correspondance entre identités applicatives, wallets custodiaux, patients et rôles métier.</li>
+    </ul>
+    <h3>18.2 Recommandations d’implémentation</h3>
+    <ul>
+      <li>Auth : email + mot de passe avec Argon2, session sécurisée et MFA pour les professionnels.</li>
+      <li>Clés : KMS, Vault ou HSM pour isoler les wallets custodiaux.</li>
+      <li>Stockage : base SQL pour le métier, stockage objet chiffré pour les fichiers.</li>
+      <li>Hashing : SHA-256 homogène côté backend pour documents, pointeurs et identifiants pseudonymisés.</li>
+      <li>Audit : persister aussi un journal off-chain pour les événements applicatifs non on-chain.</li>
+    </ul>
+    <h3>18.3 Évolutions naturelles du contrat</h3>
+    <ul>
+      <li>ajouter un vrai historique multi-événements pour des lectures répétées d’une même ressource,</li>
+      <li>ajouter des types de documents supplémentaires,</li>
+      <li>lier explicitement une chaîne de versions entre documents,</li>
+      <li>ajouter des politiques d’accès plus fines que le simple bitmask actuel.</li>
+    </ul>
+    <h3>18.4 Vérification actuelle</h3>
+    <p>La suite locale valide actuellement :</p>
+    <ul>
+      <li>configuration globale et seuil,</li>
+      <li>cycle de vie des rôles,</li>
+      <li>patient et consentement,</li>
+      <li>prescription, QR et dispensation,</li>
+      <li>facturation et claims,</li>
+      <li>identité custodiale, ancrage médical et audit d’accès.</li>
+    </ul>
+
+    <div class="page-break"></div>
+    <div class="annex-header">Annexe B - Pour les investisseurs</div>
+    <h2>19. Annexe synthèse investisseurs</h2>
+    <p>Cette annexe traduit la valeur produit sans entrer dans les détails d’implémentation.</p>
+    <h3>19.1 Problème adressé</h3>
+    <p>
+      Les données de santé sont sensibles, fragmentées et souvent difficiles à partager avec preuve d’intégrité.
+      Les utilisateurs finaux ne veulent pas gérer un wallet crypto ni payer des frais blockchain.
+    </p>
+    <h3>19.2 Réponse de BioWatchCare</h3>
+    <ul>
+      <li>expérience utilisateur simple, type application santé classique,</li>
+      <li>traçabilité forte des accès et actions critiques,</li>
+      <li>preuve d’intégrité des documents médicaux,</li>
+      <li>contrôle de consentement patient,</li>
+      <li>automatisation partielle du remboursement.</li>
+    </ul>
+    <h3>19.3 Avantage stratégique</h3>
+    <ul>
+      <li>la blockchain est invisible côté utilisateur,</li>
+      <li>les coûts restent maîtrisés car seules les preuves sont on-chain,</li>
+      <li>l’architecture est compatible avec des exigences fortes d’audit,</li>
+      <li>le socle est extensible vers assurance, pharmacie, hôpital et télémédecine.</li>
+    </ul>
+    <h3>19.4 Lecture business</h3>
+    <p>
+      BioWatchCare peut être présenté comme un registre de confiance pour l’écosystème santé,
+      avec une logique SaaS / B2B2C : établissements de santé, réseaux de soins, assureurs et patients.
+    </p>
+
+    <p class="small">Document généré à partir du code source actuel du programme Anchor BioWatchCare.</p>
+  </main>
+</body>
+</html>

@@ -36,4 +36,24 @@ pub enum ErrorCode {
     AmountOverflow,
     #[msg("Invalid currency code")]
     InvalidCurrencyCode,
+    #[msg("Invalid role class")]
+    InvalidRoleClass,
+    #[msg("User identity inactive")]
+    IdentityInactive,
+    #[msg("Invalid record type")]
+    InvalidRecordType,
+    #[msg("Medical record already superseded")]
+    RecordAlreadySuperseded,
+    #[msg("Invalid record status transition")]
+    InvalidRecordStatus,
+    // Admin transfer
+    #[msg("No pending admin transfer")]
+    NoPendingAdminTransfer,
+    // Claim settlement
+    #[msg("Claim is not in Approved state")]
+    ClaimNotApproved,
+    #[msg("Claim has already been settled")]
+    ClaimAlreadySettled,
+    #[msg("Payment mint not configured on GlobalConfig")]
+    PaymentMintNotSet,
 }

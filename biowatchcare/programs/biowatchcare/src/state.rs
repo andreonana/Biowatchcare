@@ -36,30 +36,63 @@ pub enum ClaimDecision {
     Rejected,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum UserRoleClass {
+    Patient,
+    Practitioner,
+    Operator,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum IdentityStatus {
+    Active,
+    Suspended,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum RecordType {
+    Consultation,
+    LabResult,
+    Imaging,
+    Vaccination,
+    ClinicalNote,
+    ExternalDocument,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum RecordStatus {
+    Active,
+    Archived,
+    Superseded,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum AccessKind {
+    Read,
+    Write,
+    Share,
+    Export,
+}
+
 /// Global configuration for the BioWatchCare program.
 ///
-/// Invariants:
-/// - admin is the sole authority for admin-only instructions.
-/// - auto_reimb_threshold governs automatic claim decisions.
+/// Space: 8 (disc) + 32 (admin) + 8 (threshold) + 1 (bump) + 8 (created_at)
+///      + 32 (pending_admin) + 32 (payment_mint) = 121 bytes.
 ///
-/// Space calculation:
-/// 8 (discriminator) + 32 (admin) + 8 (auto_reimb_threshold) + 1 (bump) + 8 (created_at) = 57 bytes.
-///
-/// Fields:
-/// - admin: central payer and authority.
-/// - auto_reimb_threshold: max amount for auto-approval.
-/// - bump: PDA bump.
-/// - created_at: unix timestamp.
+/// pending_admin: non-zero only during a 2-step admin transfer.
+/// payment_mint: SPL mint used for claim settlement; Pubkey::default means not configured.
 #[account]
 pub struct GlobalConfig {
     pub admin: Pubkey,
     pub auto_reimb_threshold: u64,
     pub bump: u8,
     pub created_at: i64,
+    pub pending_admin: Pubkey,
+    pub payment_mint: Pubkey,
 }
 
 impl GlobalConfig {
-    pub const SPACE: usize = 8 + 32 + 8 + 1 + 8;
+    pub const SPACE: usize = 8 + 32 + 8 + 1 + 8 + 32 + 32;
 
     pub fn new(admin: Pubkey, bump: u8, created_at: i64) -> Self {
         Self {
@@ -67,28 +100,15 @@ impl GlobalConfig {
             auto_reimb_threshold: DEFAULT_AUTO_REIMB_THRESHOLD,
             bump,
             created_at,
+            pending_admin: Pubkey::default(),
+            payment_mint: Pubkey::default(),
         }
     }
 }
 
-/// Role registry for entities that can interact with medical data.
+/// Role registry for entities (Hospital, Insurer, Doctor, Pharmacist).
 ///
-/// Invariants:
-/// - entity must be unique for a given role PDA.
-/// - status must be Approved to perform privileged actions.
-///
-/// Space calculation:
-/// 8 (discriminator) + 32 (entity) + 1 (role) + 1 (status) + 32 (metadata_hash)
-/// + 32 (approved_by) + 8 (updated_at) + 1 (bump) = 115 bytes.
-///
-/// Fields:
-/// - entity: public key of the hospital/insurer/doctor/pharmacist.
-/// - role: Role enum.
-/// - status: EntityStatus enum.
-/// - metadata_hash: off-chain metadata pointer hash.
-/// - approved_by: admin key that approved/revoked.
-/// - updated_at: unix timestamp.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 1 + 1 + 32 + 32 + 8 + 1 = 115 bytes.
 #[account]
 pub struct EntityRole {
     pub entity: Pubkey,
@@ -104,22 +124,9 @@ impl EntityRole {
     pub const SPACE: usize = 8 + 32 + 1 + 1 + 32 + 32 + 8 + 1;
 }
 
-/// Patient profile keyed by a hashed identifier.
+/// Patient profile keyed by hashed identifier. Identity never stored in plain text.
 ///
-/// Invariants:
-/// - patient_id_hash is immutable.
-/// - only approved hospitals/insurers can create profiles.
-///
-/// Space calculation:
-/// 8 (discriminator) + 32 (patient_id_hash) + 1 (status) + 32 (created_by)
-/// + 8 (created_at) + 1 (bump) = 82 bytes.
-///
-/// Fields:
-/// - patient_id_hash: hash of patient identifier.
-/// - status: PatientStatus enum.
-/// - created_by: hospital/insurer that created the profile.
-/// - created_at: unix timestamp.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 1 + 32 + 8 + 1 = 82 bytes.
 #[account]
 pub struct PatientProfile {
     pub patient_id_hash: [u8; 32],
@@ -133,24 +140,27 @@ impl PatientProfile {
     pub const SPACE: usize = 8 + 32 + 1 + 32 + 8 + 1;
 }
 
-/// Consent record defining access scopes for a grantee.
+/// App-level user identity linking a hashed app ID to a wallet.
 ///
-/// Invariants:
-/// - patient and grantee are immutable.
-/// - scopes is a bitmask of allowed permissions.
+/// Space: 8 + 32 + 32 + 1 + 1 + 8 + 8 + 1 = 91 bytes.
+#[account]
+pub struct UserIdentity {
+    pub app_user_id_hash: [u8; 32],
+    pub wallet: Pubkey,
+    pub role_class: UserRoleClass,
+    pub status: IdentityStatus,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
+impl UserIdentity {
+    pub const SPACE: usize = 8 + 32 + 32 + 1 + 1 + 8 + 8 + 1;
+}
+
+/// Consent record with bitmask scopes for a grantee.
 ///
-/// Space calculation:
-/// 8 (discriminator) + 32 (patient) + 32 (grantee) + 4 (scopes) + 8 (expires_at)
-/// + 1 (revoked) + 8 (updated_at) + 1 (bump) = 94 bytes.
-///
-/// Fields:
-/// - patient: patient profile PDA.
-/// - grantee: entity receiving access.
-/// - scopes: bitmask of scopes.
-/// - expires_at: unix timestamp (0 means no expiry).
-/// - revoked: revocation flag.
-/// - updated_at: unix timestamp.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 32 + 4 + 8 + 1 + 8 + 1 = 94 bytes.
 #[account]
 pub struct Consent {
     pub patient: Pubkey,
@@ -166,24 +176,31 @@ impl Consent {
     pub const SPACE: usize = 8 + 32 + 32 + 4 + 8 + 1 + 8 + 1;
 }
 
-/// Prescription record created by an approved doctor.
+/// Medical record anchor — data stays off-chain, only hashes on-chain.
 ///
-/// Invariants:
-/// - rx_hash and patient are immutable.
-/// - status transitions from Active to Cancelled only.
+/// Space: 8 + 32 + 32 + 1 + 32 + 32 + 4 + 1 + 32 + 8 + 8 + 1 = 191 bytes.
+#[account]
+pub struct MedicalRecordAnchor {
+    pub patient: Pubkey,
+    pub author: Pubkey,
+    pub record_type: RecordType,
+    pub record_hash: [u8; 32],
+    pub pointer_hash: [u8; 32],
+    pub version: u32,
+    pub status: RecordStatus,
+    pub superseded_by: Pubkey,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
+impl MedicalRecordAnchor {
+    pub const SPACE: usize = 8 + 32 + 32 + 1 + 32 + 32 + 4 + 1 + 32 + 8 + 8 + 1;
+}
+
+/// Prescription created by an approved doctor.
 ///
-/// Space calculation:
-/// 8 (discriminator) + 32 (patient) + 32 (rx_hash) + 32 (doctor) + 32 (pointer_hash)
-/// + 8 (created_at) + 1 (status) + 1 (bump) = 146 bytes.
-///
-/// Fields:
-/// - patient: patient profile PDA.
-/// - rx_hash: hash of prescription.
-/// - doctor: doctor signer.
-/// - pointer_hash: off-chain pointer hash.
-/// - created_at: unix timestamp.
-/// - status: RxStatus enum.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 32 + 32 + 32 + 8 + 1 + 1 = 146 bytes.
 #[account]
 pub struct Prescription {
     pub patient: Pubkey,
@@ -199,24 +216,9 @@ impl Prescription {
     pub const SPACE: usize = 8 + 32 + 32 + 32 + 32 + 8 + 1 + 1;
 }
 
-/// QR token issued for a prescription, valid for 48h.
+/// QR token for a prescription — single-use, valid 48 h.
 ///
-/// Invariants:
-/// - expires_at is immutable.
-/// - used can only move from false to true.
-///
-/// Space calculation:
-/// 8 (discriminator) + 32 (prescription) + 32 (token_hash) + 8 (expires_at) + 1 (used)
-/// + 8 (used_at) + 32 (used_by) + 1 (bump) = 122 bytes.
-///
-/// Fields:
-/// - prescription: prescription PDA.
-/// - token_hash: hash of QR token.
-/// - expires_at: unix timestamp.
-/// - used: usage flag.
-/// - used_at: unix timestamp when used.
-/// - used_by: pharmacist that used it.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 32 + 8 + 1 + 8 + 32 + 1 = 122 bytes.
 #[account]
 pub struct QrToken {
     pub prescription: Pubkey,
@@ -232,21 +234,9 @@ impl QrToken {
     pub const SPACE: usize = 8 + 32 + 32 + 8 + 1 + 8 + 32 + 1;
 }
 
-/// Dispense record created by a pharmacist when a QR token is used.
+/// Dispense record written by a pharmacist when consuming a QR token.
 ///
-/// Invariants:
-/// - prescription and pharmacist are immutable.
-///
-/// Space calculation:
-/// 8 (discriminator) + 32 (prescription) + 32 (pharmacist) + 32 (dispense_hash)
-/// + 8 (created_at) + 1 (bump) = 113 bytes.
-///
-/// Fields:
-/// - prescription: prescription PDA.
-/// - pharmacist: pharmacist signer.
-/// - dispense_hash: hash of dispense record.
-/// - created_at: unix timestamp.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 32 + 32 + 8 + 1 = 113 bytes.
 #[account]
 pub struct Dispense {
     pub prescription: Pubkey,
@@ -260,23 +250,11 @@ impl Dispense {
     pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1;
 }
 
-/// Invoice record created by an approved hospital.
+/// Invoice created by an approved hospital.
 ///
-/// Invariants:
-/// - invoice_hash and patient are immutable.
-/// - amount must fit within u64.
+/// hospital field is stored so settle_claim can route payment without extra args.
 ///
-/// Space calculation:
-/// 8 (discriminator) + 32 (patient) + 32 (invoice_hash) + 8 (amount) + 3 (currency_code)
-/// + 8 (created_at) + 1 (bump) = 92 bytes.
-///
-/// Fields:
-/// - patient: patient profile PDA.
-/// - invoice_hash: hash of invoice document.
-/// - amount: invoice amount.
-/// - currency_code: ISO currency code bytes.
-/// - created_at: unix timestamp.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 32 + 8 + 3 + 8 + 32 + 1 = 124 bytes.
 #[account]
 pub struct Invoice {
     pub patient: Pubkey,
@@ -284,30 +262,19 @@ pub struct Invoice {
     pub amount: u64,
     pub currency_code: [u8; 3],
     pub created_at: i64,
+    pub hospital: Pubkey,
     pub bump: u8,
 }
 
 impl Invoice {
-    pub const SPACE: usize = 8 + 32 + 32 + 8 + 3 + 8 + 1;
+    pub const SPACE: usize = 8 + 32 + 32 + 8 + 3 + 8 + 32 + 1;
 }
 
-/// Claim status record for insurer decisions.
+/// Claim decision record.
 ///
-/// Invariants:
-/// - invoice and insurer are immutable.
-/// - status can transition from Pending to Approved/Rejected only once.
+/// settled tracks whether the SPL payment has been executed.
 ///
-/// Space calculation:
-/// 8 (discriminator) + 32 (invoice) + 32 (insurer) + 1 (status) + 8 (decided_at)
-/// + 2 (reason_code) + 1 (bump) = 84 bytes.
-///
-/// Fields:
-/// - invoice: invoice PDA.
-/// - insurer: insurer public key.
-/// - status: ClaimDecision enum.
-/// - decided_at: unix timestamp.
-/// - reason_code: insurer rejection reason code.
-/// - bump: PDA bump.
+/// Space: 8 + 32 + 32 + 1 + 8 + 2 + 1 + 1 = 85 bytes.
 #[account]
 pub struct ClaimStatus {
     pub invoice: Pubkey,
@@ -316,8 +283,31 @@ pub struct ClaimStatus {
     pub decided_at: i64,
     pub reason_code: u16,
     pub bump: u8,
+    pub settled: bool,
 }
 
 impl ClaimStatus {
-    pub const SPACE: usize = 8 + 32 + 32 + 1 + 8 + 2 + 1;
+    pub const SPACE: usize = 8 + 32 + 32 + 1 + 8 + 2 + 1 + 1;
+}
+
+/// Immutable audit record of a data access event.
+///
+/// nonce in both the seed and the struct prevents PDA collision
+/// when the same accessor reads the same resource multiple times.
+///
+/// Space: 8 + 32 + 32 + 32 + 1 + 32 + 8 + 8 + 1 = 154 bytes.
+#[account]
+pub struct AccessEvent {
+    pub patient: Pubkey,
+    pub accessor: Pubkey,
+    pub resource: Pubkey,
+    pub access_kind: AccessKind,
+    pub resource_hash: [u8; 32],
+    pub occurred_at: i64,
+    pub nonce: u64,
+    pub bump: u8,
+}
+
+impl AccessEvent {
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 1 + 32 + 8 + 8 + 1;
 }

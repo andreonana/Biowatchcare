@@ -4,8 +4,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const DEFAULT_PROGRAM_ID = "E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX";
 const PROGRAM_ID = new anchor.web3.PublicKey(
-  "FhXSGiUzcvtAVqXM8tyy1HzUf4mFxkUQEvwgmjLRgow3"
+  process.env.PROGRAM_ID || DEFAULT_PROGRAM_ID
 );
 const CONFIG_SEED = Buffer.from("config");
 

@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BioWatchCare MVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="brand-kicker">BioWatchCare</p>
+          <h1>MVP Solana direct</h1>
+          <p class="brand-copy">
+            Interface operable sans backend avec connexion Phantom reelle et
+            signature admin locale pour les flux multisignatures.
+          </p>
+        </div>
+
+        <nav class="nav-rail">
+          <button class="nav-pill is-active" data-tab="setup">Setup</button>
+          <button class="nav-pill" data-tab="roles">Roles</button>
+          <button class="nav-pill" data-tab="patient">Patient</button>
+          <button class="nav-pill" data-tab="care">Prescription</button>
+          <button class="nav-pill" data-tab="billing">Facturation</button>
+        </nav>
+
+        <section class="summary-card">
+          <div class="summary-head">
+            <h2>Connexion</h2>
+            <button id="connect-wallet" class="primary compact">Connecter Phantom</button>
+          </div>
+
+          <label>
+            RPC URL
+            <input id="rpc-url" value="https://api.devnet.solana.com" />
+          </label>
+          <div class="button-row compact-row">
+            <button id="preset-localnet" class="compact" type="button">Localnet</button>
+            <button id="preset-devnet" class="compact" type="button">Devnet</button>
+          </div>
+
+          <label>
+            Program ID
+            <input
+              id="program-id"
+              value="E7BWwRFQBYXmNqqAfNPYm1ccgWysJqtJrvUSq1NTnooX"
+            />
+          </label>
+
+          <div class="mode-switch">
+            <button id="mode-wallet" class="compact is-selected" type="button">
+              Admin = wallet
+            </button>
+            <button id="mode-imported" class="compact" type="button">
+              Admin importe
+            </button>
+          </div>
+
+          <div id="admin-import-panel" class="hidden">
+            <label>
+              Secret key JSON admin
+              <textarea
+                id="admin-secret"
+                rows="4"
+                placeholder="[12,34,...]"
+              ></textarea>
+            </label>
+            <div class="button-row">
+              <label class="file-button">
+                Charger fichier JSON
+                <input id="admin-secret-file" type="file" accept=".json,application/json" />
+              </label>
+              <button id="load-admin-secret" type="button">Charger admin</button>
+            </div>
+          </div>
+
+          <div class="status-stack">
+            <div>
+              <span class="meta-label">Actor wallet</span>
+              <span id="actor-wallet" class="mono small">non connecte</span>
+            </div>
+            <div>
+              <span class="meta-label">Admin signer</span>
+              <span id="admin-wallet" class="mono small">non defini</span>
+            </div>
+            <div>
+              <span class="meta-label">Config PDA</span>
+              <span id="config-pda" class="mono small">-</span>
+            </div>
+            <div>
+              <span class="meta-label">Soldes</span>
+              <span id="balances" class="small">-</span>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button id="ping-rpc" type="button">Tester RPC</button>
+            <button id="refresh-state" type="button">Rafraichir etats</button>
+          </div>
+        </section>
+
+        <section class="summary-card">
+          <h2>PDAs derives</h2>
+          <dl class="derived-list">
+            <div><dt>Role PDA</dt><dd id="derived-role" class="mono small">-</dd></div>
+            <div><dt>Patient PDA</dt><dd id="derived-patient" class="mono small">-</dd></div>
+            <div><dt>Consent PDA</dt><dd id="derived-consent" class="mono small">-</dd></div>
+            <div><dt>Prescription PDA</dt><dd id="derived-rx" class="mono small">-</dd></div>
+            <div><dt>QR PDA</dt><dd id="derived-qr" class="mono small">-</dd></div>
+            <div><dt>Invoice PDA</dt><dd id="derived-invoice" class="mono small">-</dd></div>
+            <div><dt>Claim PDA</dt><dd id="derived-claim" class="mono small">-</dd></div>
+          </dl>
+        </section>
+
+        <section class="summary-card">
+          <div class="summary-head">
+            <h2>Dossiers locaux</h2>
+            <button id="clear-records" class="compact" type="button">Vider</button>
+          </div>
+          <div class="record-block">
+            <div class="record-head">
+              <span>Entites</span>
+              <button id="save-entity-record" class="compact" type="button">Sauver</button>
+            </div>
+            <div id="entity-records" class="record-list"></div>
+          </div>
+          <div class="record-block">
+            <div class="record-head">
+              <span>Patients</span>
+              <button id="save-patient-record" class="compact" type="button">Sauver</button>
+            </div>
+            <div id="patient-records" class="record-list"></div>
+          </div>
+          <div class="record-block">
+            <div class="record-head">
+              <span>Ordonnances</span>
+              <button id="save-rx-record" class="compact" type="button">Sauver</button>
+            </div>
+            <div id="rx-records" class="record-list"></div>
+          </div>
+          <div class="record-block">
+            <div class="record-head">
+              <span>Factures</span>
+              <button id="save-invoice-record" class="compact" type="button">Sauver</button>
+            </div>
+            <div id="invoice-records" class="record-list"></div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="hero-panel">
+          <div>
+            <p class="eyebrow">MVP exploitable</p>
+            <h2>Connexion reelle, formulaires lisibles, actions on-chain directes</h2>
+          </div>
+          <div class="hero-actions">
+            <button id="airdrop-actor" type="button">Airdrop actor</button>
+            <button id="airdrop-admin" type="button">Airdrop admin</button>
+          </div>
+        </section>
+
+        <section class="tab-panel is-active" data-panel="setup">
+          <div class="panel-grid two">
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">1. Configuration</p>
+                  <h3>Initialiser et piloter la config admin</h3>
+                </div>
+                <button id="read-config" type="button">Lire config</button>
+              </div>
+              <label>
+                Threshold
+                <input id="threshold" type="number" value="75000" />
+              </label>
+              <div class="button-row">
+                <button id="initialize-config" class="primary" type="button">
+                  initialize_config
+                </button>
+                <button id="set-threshold" type="button">set_threshold</button>
+              </div>
+              <div id="config-preview" class="data-preview">Aucune config lue.</div>
+            </article>
+
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">2. Identite active</p>
+                  <h3>Definir l’entite cible pour les operations</h3>
+                </div>
+              </div>
+              <label>
+                Entite / acteur cible
+                <input
+                  id="role-entity"
+                  placeholder="vide = wallet connecte"
+                />
+              </label>
+              <label>
+                Role
+                <select id="role-kind">
+                  <option value="0">Hospital</option>
+                  <option value="1">Insurer</option>
+                  <option value="2">Doctor</option>
+                  <option value="3">Pharmacist</option>
+                </select>
+              </label>
+              <label>
+                Metadata hash
+                <div class="inline-input">
+                  <input id="role-metadata-hash" placeholder="hex 32 bytes" />
+                  <button id="random-role-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <div id="role-preview" class="data-preview">Aucun role lu.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="roles">
+          <div class="panel-grid two">
+          <article class="feature-card">
+            <div class="card-top">
+              <div>
+                <p class="section-kicker">Roles et habilitations</p>
+                <h3>Enregistrer, approuver et revoquer un role</h3>
+              </div>
+              <button id="read-role" type="button">Lire role</button>
+            </div>
+            <div class="button-row">
+              <button id="register-role" class="primary" type="button">
+                register_entity
+              </button>
+              <button id="approve-role" type="button">approve_entity</button>
+              <button id="revoke-role" type="button">revoke_entity</button>
+            </div>
+            <p class="helper">
+              Si le champ entite est vide, l’application cible le wallet Phantom
+              connecte. Utilisez cela pour accorder des roles a l’acteur courant.
+            </p>
+          </article>
+          <article class="feature-card">
+            <div class="card-top">
+              <div>
+                <p class="section-kicker">Formulaire entite</p>
+                <h3>Creer un dossier d'organisation avant on-chain</h3>
+              </div>
+            </div>
+            <div class="form-split">
+              <label>
+                Nom legal
+                <input id="entity-name" placeholder="Hopital Central" />
+              </label>
+              <label>
+                Email
+                <input id="entity-email" placeholder="contact@structure.tld" />
+              </label>
+              <label>
+                Telephone
+                <input id="entity-phone" placeholder="+237..." />
+              </label>
+              <label>
+                Ville
+                <input id="entity-city" placeholder="Douala" />
+              </label>
+            </div>
+            <label>
+              Adresse
+              <textarea id="entity-address" rows="3" placeholder="Adresse complete"></textarea>
+            </label>
+            <div class="button-row">
+              <button id="build-entity-hash" class="primary" type="button">Generer metadata hash</button>
+            </div>
+            <div id="entity-form-preview" class="data-preview">Aucune fiche entite generee.</div>
+          </article>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="patient">
+          <div class="panel-grid two">
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">Patient</p>
+                  <h3>Creer et relire un profil patient</h3>
+                </div>
+                <button id="read-patient" type="button">Lire patient</button>
+              </div>
+              <div class="form-split">
+                <label>
+                  Nom complet
+                  <input id="patient-name" placeholder="Nom et prenom" />
+                </label>
+                <label>
+                  Date de naissance
+                  <input id="patient-dob" type="date" />
+                </label>
+                <label>
+                  Sexe
+                  <select id="patient-gender">
+                    <option value="">Choisir</option>
+                    <option value="F">F</option>
+                    <option value="M">M</option>
+                    <option value="X">X</option>
+                  </select>
+                </label>
+                <label>
+                  Telephone
+                  <input id="patient-phone" placeholder="+237..." />
+                </label>
+              </div>
+              <label>
+                Adresse
+                <textarea id="patient-address" rows="3" placeholder="Adresse du patient"></textarea>
+              </label>
+              <label>
+                Patient ID hash
+                <div class="inline-input">
+                  <input id="patient-id-hash" placeholder="hex 32 bytes" />
+                  <button id="random-patient-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <div class="button-row">
+                <button id="build-patient-hash" type="button">Generer hash patient</button>
+                <button id="create-patient" class="primary" type="button">
+                  create_patient_profile
+                </button>
+              </div>
+              <div id="patient-preview" class="data-preview">Aucun patient lu.</div>
+            </article>
+
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">Consentement</p>
+                  <h3>Accorder ou revoquer l’acces on-chain</h3>
+                </div>
+                <button id="read-consent" type="button">Lire consent</button>
+              </div>
+              <label>
+                Grantee pubkey
+                <input id="consent-grantee" placeholder="pubkey grantee" />
+              </label>
+              <label>
+                Scopes
+                <select id="consent-scopes">
+                  <option value="1">VIEW_RECORDS</option>
+                  <option value="2">VIEW_PRESCRIPTIONS</option>
+                  <option value="4">VIEW_INVOICES</option>
+                  <option value="7">VIEW_ALL</option>
+                </select>
+              </label>
+              <label>
+                Expiration unix
+                <input id="consent-expiry" type="number" />
+              </label>
+              <div class="button-row">
+                <button id="grant-consent" class="primary" type="button">
+                  grant_consent
+                </button>
+                <button id="revoke-consent" type="button">revoke_consent</button>
+              </div>
+              <div id="consent-preview" class="data-preview">Aucun consentement lu.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="care">
+          <div class="panel-grid two">
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">Prescription</p>
+                  <h3>Creer puis annuler une prescription</h3>
+                </div>
+                <button id="read-rx" type="button">Lire prescription</button>
+              </div>
+              <div class="form-split">
+                <label>
+                  Diagnostic
+                  <input id="rx-diagnosis" placeholder="Paludisme simple" />
+                </label>
+                <label>
+                  Medicament
+                  <input id="rx-medication" placeholder="Artemether..." />
+                </label>
+                <label>
+                  Posologie
+                  <input id="rx-dosage" placeholder="2 comprimes / jour" />
+                </label>
+                <label>
+                  Duree
+                  <input id="rx-duration" placeholder="5 jours" />
+                </label>
+              </div>
+              <label>
+                Notes cliniques / lien doc
+                <textarea id="rx-notes" rows="3" placeholder="Notes ou reference off-chain"></textarea>
+              </label>
+              <label>
+                Rx hash
+                <div class="inline-input">
+                  <input id="rx-hash" placeholder="hex 32 bytes" />
+                  <button id="random-rx-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <label>
+                Pointer hash
+                <div class="inline-input">
+                  <input id="pointer-hash" placeholder="hex 32 bytes" />
+                  <button id="random-pointer-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <div class="button-row">
+                <button id="build-rx-hashes" type="button">Generer hashes ordonnance</button>
+                <button id="add-rx" class="primary" type="button">
+                  add_prescription
+                </button>
+                <button id="cancel-rx" type="button">cancel_prescription</button>
+              </div>
+              <div id="rx-preview" class="data-preview">Aucune prescription lue.</div>
+            </article>
+
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">QR et dispensation</p>
+                  <h3>Emettre, verifier et consommer un token QR</h3>
+                </div>
+                <button id="read-qr" type="button">Lire QR</button>
+              </div>
+              <label>
+                Token hash
+                <div class="inline-input">
+                  <input id="token-hash" placeholder="hex 32 bytes" />
+                  <button id="random-token-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <label>
+                Dispense hash
+                <div class="inline-input">
+                  <input id="dispense-hash" placeholder="hex 32 bytes" />
+                  <button id="random-dispense-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <div class="button-row">
+                <button id="issue-qr" class="primary" type="button">
+                  issue_qr_token
+                </button>
+                <button id="verify-qr" type="button">verify_qr_token</button>
+                <button id="dispense-qr" type="button">dispense_with_qr</button>
+              </div>
+              <div id="qr-preview" class="data-preview">Aucun QR lu.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="billing">
+          <div class="panel-grid two">
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">Facture</p>
+                  <h3>Creer et relire une invoice on-chain</h3>
+                </div>
+                <button id="read-invoice" type="button">Lire invoice</button>
+              </div>
+              <div class="form-split">
+                <label>
+                  Reference facture
+                  <input id="invoice-ref" placeholder="FAC-2026-001" />
+                </label>
+                <label>
+                  Prestation
+                  <input id="invoice-service" placeholder="Consultation et examens" />
+                </label>
+              </div>
+              <label>
+                Detail de facturation
+                <textarea id="invoice-notes" rows="3" placeholder="Lignes, prise en charge, remarques"></textarea>
+              </label>
+              <label>
+                Invoice hash
+                <div class="inline-input">
+                  <input id="invoice-hash" placeholder="hex 32 bytes" />
+                  <button id="random-invoice-hash" type="button">Aleatoire</button>
+                </div>
+              </label>
+              <label>
+                Amount
+                <input id="invoice-amount" type="number" value="50000" />
+              </label>
+              <label>
+                Currency
+                <input id="invoice-currency" maxlength="3" value="XAF" />
+              </label>
+              <div class="button-row">
+                <button id="build-invoice-hash" type="button">Generer hash facture</button>
+                <button id="create-invoice" class="primary" type="button">
+                  create_invoice
+                </button>
+              </div>
+              <div id="invoice-preview" class="data-preview">Aucune invoice lue.</div>
+            </article>
+
+            <article class="feature-card">
+              <div class="card-top">
+                <div>
+                  <p class="section-kicker">Remboursement</p>
+                  <h3>Demander puis decider un claim</h3>
+                </div>
+                <button id="read-claim" type="button">Lire claim</button>
+              </div>
+              <label>
+                Insurer pubkey
+                <input id="claim-insurer" placeholder="pubkey insurer" />
+              </label>
+              <label>
+                Decision
+                <select id="claim-approve">
+                  <option value="true">Approve</option>
+                  <option value="false">Reject</option>
+                </select>
+              </label>
+              <label>
+                Reason code
+                <input id="claim-reason" type="number" value="0" />
+              </label>
+              <div class="button-row">
+                <button id="auto-claim" class="primary" type="button">
+                  auto_or_pending_claim
+                </button>
+                <button id="decide-claim" type="button">
+                  insurer_decide_claim
+                </button>
+              </div>
+              <div id="claim-preview" class="data-preview">Aucun claim lu.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="log-panel">
+          <div class="card-top">
+            <div>
+              <p class="section-kicker">Operations</p>
+              <h3>Journal des actions et signatures</h3>
+            </div>
+            <button id="clear-log" type="button">Vider</button>
+          </div>
+          <pre id="log-output"></pre>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+  </html>

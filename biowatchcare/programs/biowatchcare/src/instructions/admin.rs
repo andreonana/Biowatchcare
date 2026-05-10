@@ -1,30 +1,15 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{CONFIG_SEED, DEFAULT_AUTO_REIMB_THRESHOLD, ROLE_SEED};
+use crate::constants::{CONFIG_SEED, ROLE_SEED};
 use crate::errors::ErrorCode;
 use crate::events::*;
 use crate::state::{EntityRole, EntityStatus, GlobalConfig, Role};
 
-/// Purpose
-/// Initialize the global configuration PDA.
-/// Who signs / Who pays
-/// - Signers: admin
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central payer and authority
-/// - config: global config PDA
-/// - system_program
-/// Preconditions / Access control
-/// - Config must not already exist
-/// State changes
-/// - Create and populate GlobalConfig
-/// Events emitted
-/// - ConfigInitialized
-/// Failure modes (ErrorCode)
-/// - None
-/// Security notes
-/// - Admin must be kept in secure custody (KMS/HSM/Vault)
+// ──────────────────────────────────────────────────────────────────────────────
+// initialize_config
+// ──────────────────────────────────────────────────────────────────────────────
+/// Creates the singleton GlobalConfig PDA. Called once at deploy time.
+/// Admin is the sole payer for all governance account creations.
 pub fn initialize_config(ctx: Context<InitializeConfig>, threshold: Option<u64>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let config = &mut ctx.accounts.config;
@@ -55,25 +40,9 @@ pub struct InitializeConfig<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Purpose
-/// Update the auto reimbursement threshold.
-/// Who signs / Who pays
-/// - Signers: admin
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central authority
-/// - config: global config PDA
-/// Preconditions / Access control
-/// - admin must match config.admin
-/// State changes
-/// - Update config.auto_reimb_threshold
-/// Events emitted
-/// - ThresholdUpdated
-/// Failure modes (ErrorCode)
-/// - NotAdmin
-/// Security notes
-/// - Keep admin signer isolated from app keys
+// ──────────────────────────────────────────────────────────────────────────────
+// set_threshold
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn set_threshold(ctx: Context<SetThreshold>, new_threshold: u64) -> Result<()> {
     let config = &mut ctx.accounts.config;
     require_keys_eq!(config.admin, ctx.accounts.admin.key(), ErrorCode::NotAdmin);
@@ -93,27 +62,92 @@ pub struct SetThreshold<'info> {
     pub config: Account<'info, GlobalConfig>,
 }
 
-/// Purpose
-/// Register an entity role (pending approval).
-/// Who signs / Who pays
-/// - Signers: admin
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central authority
-/// - config: global config PDA
-/// - role_account: role PDA for entity
-/// - system_program
-/// Preconditions / Access control
-/// - admin must match config.admin
-/// State changes
-/// - Create EntityRole with Pending status
-/// Events emitted
-/// - EntityRegistered
-/// Failure modes (ErrorCode)
-/// - NotAdmin
-/// Security notes
-/// - Metadata is stored as hash only
+// ──────────────────────────────────────────────────────────────────────────────
+// set_payment_mint
+// ──────────────────────────────────────────────────────────────────────────────
+/// Configure the SPL token mint used for claim settlement.
+/// Set once after deploying the program; can be updated by admin.
+pub fn set_payment_mint(ctx: Context<SetPaymentMint>, mint: Pubkey) -> Result<()> {
+    let config = &mut ctx.accounts.config;
+    require_keys_eq!(config.admin, ctx.accounts.admin.key(), ErrorCode::NotAdmin);
+    config.payment_mint = mint;
+    emit!(PaymentMintSet {
+        admin: config.admin,
+        mint,
+    });
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct SetPaymentMint<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, GlobalConfig>,
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// propose_admin_transfer
+// ──────────────────────────────────────────────────────────────────────────────
+/// Step 1 of 2-step admin hand-off: current admin nominates a successor.
+/// No authority change until the successor calls accept_admin_transfer.
+pub fn propose_admin_transfer(
+    ctx: Context<ProposeAdminTransfer>,
+    new_admin: Pubkey,
+) -> Result<()> {
+    let config = &mut ctx.accounts.config;
+    require_keys_eq!(config.admin, ctx.accounts.admin.key(), ErrorCode::NotAdmin);
+    let current = config.admin;
+    config.pending_admin = new_admin;
+    emit!(AdminTransferProposed {
+        current_admin: current,
+        pending_admin: new_admin,
+    });
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct ProposeAdminTransfer<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, GlobalConfig>,
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// accept_admin_transfer
+// ──────────────────────────────────────────────────────────────────────────────
+/// Step 2 of 2-step admin hand-off: the nominated new admin signs to accept.
+/// Clears pending_admin after the swap.
+pub fn accept_admin_transfer(ctx: Context<AcceptAdminTransfer>) -> Result<()> {
+    let config = &mut ctx.accounts.config;
+    require!(
+        config.pending_admin != Pubkey::default(),
+        ErrorCode::NoPendingAdminTransfer
+    );
+    require_keys_eq!(
+        config.pending_admin,
+        ctx.accounts.new_admin.key(),
+        ErrorCode::Unauthorized
+    );
+    let new_admin = ctx.accounts.new_admin.key();
+    config.admin = new_admin;
+    config.pending_admin = Pubkey::default();
+    emit!(AdminTransferAccepted { new_admin });
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct AcceptAdminTransfer<'info> {
+    #[account(mut)]
+    pub new_admin: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, GlobalConfig>,
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// register_entity
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn register_entity(
     ctx: Context<RegisterEntity>,
     role: Role,
@@ -157,26 +191,9 @@ pub struct RegisterEntity<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Purpose
-/// Approve an entity role.
-/// Who signs / Who pays
-/// - Signers: admin
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central authority
-/// - config: global config PDA
-/// - role_account: entity role PDA
-/// Preconditions / Access control
-/// - admin must match config.admin
-/// State changes
-/// - Set status Approved and updated_at
-/// Events emitted
-/// - EntityApproved
-/// Failure modes (ErrorCode)
-/// - NotAdmin
-/// Security notes
-/// - Only admin can approve
+// ──────────────────────────────────────────────────────────────────────────────
+// approve_entity
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn approve_entity(ctx: Context<ApproveEntity>) -> Result<()> {
     let config = &ctx.accounts.config;
     require_keys_eq!(config.admin, ctx.accounts.admin.key(), ErrorCode::NotAdmin);
@@ -202,26 +219,9 @@ pub struct ApproveEntity<'info> {
     pub role_account: Account<'info, EntityRole>,
 }
 
-/// Purpose
-/// Revoke an entity role.
-/// Who signs / Who pays
-/// - Signers: admin
-/// - Anchor payer (rent): admin
-/// - Transaction fee payer: admin (client-side)
-/// Accounts
-/// - admin: central authority
-/// - config: global config PDA
-/// - role_account: entity role PDA
-/// Preconditions / Access control
-/// - admin must match config.admin
-/// State changes
-/// - Set status Revoked and updated_at
-/// Events emitted
-/// - EntityRevoked
-/// Failure modes (ErrorCode)
-/// - NotAdmin
-/// Security notes
-/// - Revocation is immediate and on-chain
+// ──────────────────────────────────────────────────────────────────────────────
+// revoke_entity
+// ──────────────────────────────────────────────────────────────────────────────
 pub fn revoke_entity(ctx: Context<RevokeEntity>) -> Result<()> {
     let config = &ctx.accounts.config;
     require_keys_eq!(config.admin, ctx.accounts.admin.key(), ErrorCode::NotAdmin);
